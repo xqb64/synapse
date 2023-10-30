@@ -92,6 +92,10 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
 
     pub fn run(&mut self) {
         loop {
+            if cfg!(debug_assertions) {
+                println!("current instruction: {:?}", self.bytecode[self.ip]);
+            }
+
             match unsafe { *self.bytecode.get_unchecked(self.ip) } {
                 Opcode::Const(n) => self.handle_op_const(n),
                 Opcode::Str(s) => self.handle_op_str(s),
@@ -101,6 +105,10 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
                 Opcode::Mul => self.handle_op_mul(),
                 Opcode::Div => self.handle_op_div(),
                 Opcode::Halt => break,
+            }
+
+            if cfg!(debug_assertions) {
+                println!("stack: {:?}", self.stack);
             }
 
             self.ip += 1;
@@ -118,6 +126,9 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
     fn handle_op_print(&mut self) {
         let obj = self.stack.pop();
         if let Some(o) = obj {
+            if cfg!(debug_assertions) {
+                print!("dbg: ");
+            }
             println!("{:?}", o);
         }
     }

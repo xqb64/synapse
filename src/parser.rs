@@ -40,15 +40,15 @@ impl<'source> Parser<'source> {
         self.current.unwrap().kind == kind
     }
 
-    fn advance(&mut self) {
+    fn advance(&mut self) -> Option<Token<'source>> {
         self.previous = self.current;
         self.current = self.tokens.pop_front();
+        self.previous
     }
 
     fn consume(&mut self, kind: TokenKind) -> Option<Token<'source>> {
         if self.check(kind) {
-            self.advance();
-            return self.previous;
+            return self.advance();
         }
         None
     }
@@ -62,7 +62,6 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_print_statement(&mut self) -> Statement<'source> {
-        self.consume(TokenKind::Print);
         let expression = self.parse_expression();
         self.consume(TokenKind::Semicolon);
         Statement::Print(PrintStatement { expression })
@@ -73,7 +72,7 @@ impl<'source> Parser<'source> {
     }
 
     fn term(&mut self) -> Expression<'source> {
-        let mut result = self.primary();
+        let mut result = self.factor();
         while self.is_next(&[TokenKind::Plus, TokenKind::Minus]) {
             let kind = match self.previous {
                 Some(token) => match token.kind {

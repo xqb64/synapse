@@ -59,7 +59,7 @@ impl<'source> Iterator for Tokenizer<'source> {
                     self.start = m.end();
                     match m.as_str() {
                         "+" => Token::new(TokenKind::Plus, "+"),
-                        "-" => Token::new(TokenKind::Minus, "+"),
+                        "-" => Token::new(TokenKind::Minus, "-"),
                         "*" => Token::new(TokenKind::Star, "*"),
                         "/" => Token::new(TokenKind::Slash, "/"),
                         ";" => Token::new(TokenKind::Semicolon, ";"),
@@ -67,16 +67,10 @@ impl<'source> Iterator for Tokenizer<'source> {
                     }
                 } else if let Some(m) = captures.name("number") {
                     self.start = m.end();
-                    Token::new(
-                        TokenKind::Number,
-                        &self.src[self.start..self.start + m.as_str().chars().count()],
-                    )
+                    Token::new(TokenKind::Number, m.as_str())
                 } else if let Some(m) = captures.name("string") {
                     self.start = m.end();
-                    Token::new(
-                        TokenKind::String,
-                        &self.src[self.start..self.start + m.as_str().chars().count()],
-                    )
+                    Token::new(TokenKind::String, m.as_str())
                 } else {
                     return None;
                 }
