@@ -119,3 +119,9 @@ fn relational_error() {
     );
     run_test_error!(path, expected);
 }
+
+#[test]
+fn fib20() {
+    let (path, expected) = ("tests/cases/fib20.syn", object_vec![6765.0]);
+    run_test!(path, expected);
+}
