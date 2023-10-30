@@ -1,7 +1,7 @@
 use crate::parser::{
-    BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression, Expression,
-    ExpressionStatement, FnStatement, IfStatement, Literal, LiteralExpression, PrintStatement,
-    ReturnStatement, Statement, VariableExpression,
+    AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
+    Expression, ExpressionStatement, FnStatement, IfStatement, Literal, LiteralExpression,
+    PrintStatement, ReturnStatement, Statement, VariableExpression, WhileStatement,
 };
 
 pub struct Compiler<'source> {
@@ -63,6 +63,7 @@ impl<'source> Codegen<'source> for Statement<'source> {
             Statement::Fn(fn_statement) => fn_statement.codegen(compiler),
             Statement::Return(return_statement) => return_statement.codegen(compiler),
             Statement::If(if_statement) => if_statement.codegen(compiler),
+            Statement::While(while_statement) => while_statement.codegen(compiler),
             Statement::Expression(expr_statement) => expr_statement.codegen(compiler),
             Statement::Block(block_statement) => block_statement.codegen(compiler),
             Statement::Dummy => {}
@@ -117,12 +118,26 @@ impl<'source> Codegen<'source> for IfStatement<'source> {
     }
 }
 
+impl<'source> Codegen<'source> for WhileStatement<'source> {
+    fn codegen(&self, compiler: &mut Compiler<'source>) {
+        let loop_start = compiler.bytecode.len() - 1;
+        self.condition.codegen(compiler);
+        let jz_idx = compiler.emit_bytes(&[Opcode::Jz(0xFFFF)]);
+        self.body.codegen(compiler);
+        compiler.emit_bytes(&[Opcode::Jmp(loop_start)]);
+        compiler.bytecode[jz_idx] = Opcode::Jz(compiler.bytecode.len() - 1);
+    }
+}
+
 impl<'source> Codegen<'source> for ExpressionStatement<'source> {
     fn codegen(&self, compiler: &mut Compiler<'source>) {
         match &self.expression {
             Expression::Call(call_expr) => {
                 call_expr.codegen(compiler);
                 compiler.emit_bytes(&[Opcode::Pop]);
+            }
+            Expression::Assign(assign_expr) => {
+                assign_expr.codegen(compiler);
             }
             _ => unreachable!(),
         }
@@ -159,6 +174,7 @@ impl<'source> Codegen<'source> for Expression<'source> {
             Expression::Variable(varexp) => varexp.codegen(compiler),
             Expression::Binary(binexp) => binexp.codegen(compiler),
             Expression::Call(call) => call.codegen(compiler),
+            Expression::Assign(assignment) => assignment.codegen(compiler),
         }
     }
 }
@@ -250,6 +266,25 @@ impl<'source> Codegen<'source> for CallExpression<'source> {
         let jmp_addr = compiler.functions.get(&self.variable).unwrap();
 
         compiler.emit_bytes(&[Opcode::Call(self.arguments.len()), Opcode::Jmp(*jmp_addr)]);
+    }
+}
+
+impl<'source> Codegen<'source> for AssignExpression<'source> {
+    fn codegen(&self, compiler: &mut Compiler<'source>) {
+        let variable_name = match &*self.lhs {
+            Expression::Variable(variable) => &variable.value,
+            _ => unimplemented!(),
+        };
+        self.rhs.codegen(compiler);
+
+        let local = compiler.resolve_local(variable_name);
+
+        if let Some(idx) = local {
+            compiler.emit_bytes(&[Opcode::Deepset(idx)]);
+        } else {
+            compiler.locals.push(variable_name);
+            compiler.pops[compiler.depth] += 1;
+        }
     }
 }
 

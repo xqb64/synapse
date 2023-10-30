@@ -7,6 +7,7 @@ pub enum TokenKind {
     Return,
     If,
     Else,
+    While,
     Identifier,
     Number,
     True,
@@ -16,6 +17,7 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    Equal,
     Less,
     Greater,
     LessEqual,
@@ -52,10 +54,10 @@ impl<'source> Iterator for Tokenizer<'source> {
     type Item = Token<'source>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let re_keyword = r"?P<keyword>print|fn|return|if|else";
+        let re_keyword = r"?P<keyword>print|fn|return|if|else|while";
         let re_literal = r"?P<literal>true|false|null";
         let re_identifier = r"?P<identifier>[a-zA-Z_][a-zA-Z0-9_]*";
-        let re_individual = r"?P<individual>[-+*/<>;(){},]";
+        let re_individual = r"?P<individual>[-+*/<>;(){},=]";
         let re_double = r"?P<double>==|!=|<=|>=|\+\+";
         let re_number = r"?P<number>[-+]?\d+(\.\d+)?";
         let re_string = r#""(?P<string>[^\n"]*)""#;
@@ -85,6 +87,7 @@ impl<'source> Iterator for Tokenizer<'source> {
                         "return" => Token::new(TokenKind::Return, "return"),
                         "if" => Token::new(TokenKind::If, "if"),
                         "else" => Token::new(TokenKind::Else, "else"),
+                        "while" => Token::new(TokenKind::While, "while"),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("literal") {
@@ -113,6 +116,7 @@ impl<'source> Iterator for Tokenizer<'source> {
                         "{" => Token::new(TokenKind::LeftBrace, "{"),
                         "}" => Token::new(TokenKind::RightBrace, "}"),
                         "," => Token::new(TokenKind::Comma, ","),
+                        "=" => Token::new(TokenKind::Equal, "="),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("double") {

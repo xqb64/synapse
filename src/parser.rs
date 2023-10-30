@@ -62,6 +62,8 @@ impl<'source> Parser<'source> {
             self.parse_return_statement()
         } else if self.is_next(&[TokenKind::If]) {
             self.parse_if_statement()
+        } else if self.is_next(&[TokenKind::While]) {
+            self.parse_while_statement()
         } else if self.is_next(&[TokenKind::LeftBrace]) {
             self.parse_block_statement()
         } else {
@@ -116,6 +118,17 @@ impl<'source> Parser<'source> {
         })
     }
 
+    fn parse_while_statement(&mut self) -> Statement<'source> {
+        self.consume(TokenKind::LeftParen);
+        let condition = self.parse_expression();
+        self.consume(TokenKind::RightParen);
+        let body = self.parse_statement();
+        Statement::While(WhileStatement {
+            condition,
+            body: body.into(),
+        })
+    }
+
     fn parse_block_statement(&mut self) -> Statement<'source> {
         let mut body = vec![];
         while !self.is_next(&[TokenKind::RightBrace]) {
@@ -131,7 +144,18 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expression(&mut self) -> Expression<'source> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Expression<'source> {
+        let mut result = self.equality();
+        while self.is_next(&[TokenKind::Equal]) {
+            result = Expression::Assign(AssignExpression {
+                lhs: result.into(),
+                rhs: self.equality().into(),
+            })
+        }
+        result
     }
 
     fn equality(&mut self) -> Expression<'source> {
@@ -284,6 +308,7 @@ pub enum Statement<'source> {
     Fn(FnStatement<'source>),
     Return(ReturnStatement<'source>),
     If(IfStatement<'source>),
+    While(WhileStatement<'source>),
     Block(BlockStatement<'source>),
     Expression(ExpressionStatement<'source>),
     Dummy,
@@ -314,6 +339,12 @@ pub struct IfStatement<'source> {
 }
 
 #[derive(Debug)]
+pub struct WhileStatement<'source> {
+    pub condition: Expression<'source>,
+    pub body: Box<Statement<'source>>,
+}
+
+#[derive(Debug)]
 pub struct BlockStatement<'source> {
     pub body: Vec<Statement<'source>>,
 }
@@ -329,6 +360,7 @@ pub enum Expression<'source> {
     Variable(VariableExpression<'source>),
     Binary(BinaryExpression<'source>),
     Call(CallExpression<'source>),
+    Assign(AssignExpression<'source>),
 }
 
 #[derive(Debug)]
@@ -352,6 +384,12 @@ pub struct BinaryExpression<'source> {
 pub struct CallExpression<'source> {
     pub variable: &'source str,
     pub arguments: Vec<Expression<'source>>,
+}
+
+#[derive(Debug)]
+pub struct AssignExpression<'source> {
+    pub lhs: Box<Expression<'source>>,
+    pub rhs: Box<Expression<'source>>,
 }
 
 #[derive(Debug)]

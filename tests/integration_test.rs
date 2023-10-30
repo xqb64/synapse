@@ -125,3 +125,12 @@ fn fib20() {
     let (path, expected) = ("tests/cases/fib20.syn", object_vec![6765.0]);
     run_test!(path, expected);
 }
+
+#[test]
+fn _while() {
+    let (path, expected) = (
+        "tests/cases/while.syn",
+        object_vec![5.0, 4.0, 3.0, 2.0, 1.0, 0.0],
+    );
+    run_test!(path, expected);
+}
