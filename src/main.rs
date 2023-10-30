@@ -7,6 +7,7 @@ enum TokenKind {
     Number,
     Plus,
     Minus,
+    Star,
     String,
     Semicolon,
 }
@@ -33,7 +34,7 @@ impl<'source> Iterator for Tokenizer<'source> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let re_keyword = r"?P<keyword>print";
-        let re_individual = r"?P<individual>[-+;]";
+        let re_individual = r"?P<individual>[-+*;]";
         let re_number = r"?P<number>[-+]?\d+(\.\d+)?";
         let re_string = r#""(?P<string>[^\n"]*)""#;
 
@@ -59,6 +60,7 @@ impl<'source> Iterator for Tokenizer<'source> {
                     match m.as_str() {
                         "+" => Token::new(TokenKind::Plus, "+"),
                         "-" => Token::new(TokenKind::Minus, "+"),
+                        "*" => Token::new(TokenKind::Star, "*"),
                         ";" => Token::new(TokenKind::Semicolon, ";"),
                         _ => unreachable!(),
                     }
@@ -163,12 +165,31 @@ impl<'source> Parser<'source> {
     }
 
     fn term(&mut self) -> Expression<'source> {
-        let mut result = self.primary();
+        let mut result = self.factor();
         while self.is_next(&[TokenKind::Plus, TokenKind::Minus]) {
             let kind = match self.previous {
                 Some(token) => match token.kind {
                     TokenKind::Plus => BinaryExpressionKind::Add,
                     TokenKind::Minus => BinaryExpressionKind::Sub,
+                    _ => unreachable!(),
+                },
+                None => unreachable!(),
+            };
+            result = Expression::Binary(BinaryExpression {
+                kind,
+                lhs: Box::new(result),
+                rhs: Box::new(self.factor()),
+            });
+        }
+        result
+    }
+
+    fn factor(&mut self) -> Expression<'source> {
+        let mut result = self.primary();
+        while self.is_next(&[TokenKind::Star]) {
+            let kind = match self.previous {
+                Some(token) => match token.kind {
+                    TokenKind::Star => BinaryExpressionKind::Mul,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -226,6 +247,7 @@ struct BinaryExpression<'source> {
 enum BinaryExpressionKind {
     Add,
     Sub,
+    Mul,
 }
 
 #[allow(dead_code)]
@@ -317,6 +339,9 @@ impl<'source> Codegen<'source> for BinaryExpression<'source> {
             BinaryExpressionKind::Sub => {
                 compiler.emit_bytes(&[Opcode::Sub]);
             }
+            BinaryExpressionKind::Mul => {
+                compiler.emit_bytes(&[Opcode::Mul]);
+            }
         }
     }
 }
@@ -327,6 +352,7 @@ enum Opcode<'source> {
     Const(f64),
     Add,
     Sub,
+    Mul,
     Str(&'source str),
     Halt,
 }
@@ -358,6 +384,17 @@ impl std::ops::Sub for Object {
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a - b).into(),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl std::ops::Mul for Object {
+    type Output = Object;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => (a * b).into(),
             _ => unreachable!(),
         }
     }
@@ -410,6 +447,7 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
                 Opcode::Print => self.handle_op_print(),
                 Opcode::Add => self.handle_op_add(),
                 Opcode::Sub => self.handle_op_sub(),
+                Opcode::Mul => self.handle_op_mul(),
                 Opcode::Halt => break,
             }
 
@@ -438,6 +476,10 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
 
     fn handle_op_sub(&mut self) {
         binop!(self, -);
+    }
+
+    fn handle_op_mul(&mut self) {
+        binop!(self, *);
     }
 }
 
