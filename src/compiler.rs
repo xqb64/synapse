@@ -194,8 +194,8 @@ impl<'source> Codegen<'source> for VariableExpression<'source> {
         if let Some(idx) = local {
             compiler.emit_bytes(&[Opcode::Deepget(idx)]);
         } else {
-            compiler.locals.push(self.value.clone());
-            let idx = compiler.resolve_local(self.value.clone()).unwrap();
+            compiler.locals.push(self.value);
+            let idx = compiler.resolve_local(self.value).unwrap();
             compiler.emit_bytes(&[Opcode::Deepget(idx)]);
         }
     }
