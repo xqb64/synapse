@@ -102,6 +102,12 @@ impl<'source> Codegen<'source> for BinaryExpression<'source> {
             BinaryExpressionKind::Div => {
                 compiler.emit_bytes(&[Opcode::Div]);
             }
+            BinaryExpressionKind::Equality(negation) => {
+                compiler.emit_bytes(&[Opcode::Eq]);
+                if negation {
+                    compiler.emit_bytes(&[Opcode::Not]);
+                }
+            }
         }
     }
 }
@@ -117,6 +123,7 @@ pub enum Opcode<'source> {
     False,
     Not,
     Null,
+    Eq,
     Str(&'source str),
     Halt,
 }

@@ -11,6 +11,8 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    BangEqual,
+    DoubleEqual,
     String,
     Semicolon,
 }
@@ -39,13 +41,14 @@ impl<'source> Iterator for Tokenizer<'source> {
         let re_keyword = r"?P<keyword>print";
         let re_literal = r"?P<literal>true|false|null";
         let re_individual = r"?P<individual>[-+*/;]";
+        let re_double = r"?P<double>==|!=|\+\+";
         let re_number = r"?P<number>[-+]?\d+(\.\d+)?";
         let re_string = r#""(?P<string>[^\n"]*)""#;
 
         let r = Regex::new(
             format!(
-                "({})|({})|({})|({})|({})",
-                re_keyword, re_literal, re_individual, re_number, re_string,
+                "({})|({})|({})|({})|({})|({})",
+                re_keyword, re_literal, re_double, re_individual, re_number, re_string,
             )
             .as_str(),
         )
@@ -75,6 +78,13 @@ impl<'source> Iterator for Tokenizer<'source> {
                         "*" => Token::new(TokenKind::Star, "*"),
                         "/" => Token::new(TokenKind::Slash, "/"),
                         ";" => Token::new(TokenKind::Semicolon, ";"),
+                        _ => unreachable!(),
+                    }
+                } else if let Some(m) = captures.name("double") {
+                    self.start = m.end();
+                    match m.as_str() {
+                        "==" => Token::new(TokenKind::DoubleEqual, "=="),
+                        "!=" => Token::new(TokenKind::BangEqual, "!="),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("number") {

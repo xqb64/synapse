@@ -68,7 +68,24 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expression(&mut self) -> Expression<'source> {
-        self.term()
+        self.equality()
+    }
+
+    fn equality(&mut self) -> Expression<'source> {
+        let mut result = self.term();
+        while self.is_next(&[TokenKind::DoubleEqual, TokenKind::BangEqual]) {
+            let negation = match self.previous.unwrap().kind {
+                TokenKind::BangEqual => true,
+                TokenKind::DoubleEqual => false,
+                _ => unreachable!(),
+            };
+            result = Expression::Binary(BinaryExpression {
+                kind: BinaryExpressionKind::Equality(negation),
+                lhs: Box::new(result),
+                rhs: Box::new(self.term()),
+            });
+        }
+        result
     }
 
     fn term(&mut self) -> Expression<'source> {
@@ -171,6 +188,7 @@ pub enum BinaryExpressionKind {
     Sub,
     Mul,
     Div,
+    Equality(bool), /* negation */
 }
 
 #[allow(dead_code)]

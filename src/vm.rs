@@ -133,6 +133,7 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
                 Opcode::False => self.handle_op_false(),
                 Opcode::Not => self.handle_op_not(),
                 Opcode::Null => self.handle_op_null(),
+                Opcode::Eq => self.handle_op_eq(),
                 Opcode::Halt => break,
             }
 
@@ -189,5 +190,9 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
 
     fn handle_op_null(&mut self) {
         self.stack.push(Object::Null);
+    }
+
+    fn handle_op_eq(&mut self) {
+        binop!(self, ==);
     }
 }
