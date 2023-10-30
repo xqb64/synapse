@@ -66,8 +66,19 @@ impl<'source> Codegen<'source> for LiteralExpression<'source> {
             Literal::Num(n) => {
                 compiler.emit_bytes(&[Opcode::Const(*n)]);
             }
+            Literal::Bool(b) => match b {
+                true => {
+                    compiler.emit_bytes(&[Opcode::False, Opcode::Not]);
+                }
+                false => {
+                    compiler.emit_bytes(&[Opcode::False]);
+                }
+            },
             Literal::String(s) => {
                 compiler.emit_bytes(&[Opcode::Str(s)]);
+            }
+            Literal::Null => {
+                compiler.emit_bytes(&[Opcode::Null]);
             }
         }
     }
@@ -103,6 +114,9 @@ pub enum Opcode<'source> {
     Sub,
     Mul,
     Div,
+    False,
+    Not,
+    Null,
     Str(&'source str),
     Halt,
 }

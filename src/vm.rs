@@ -4,7 +4,16 @@ use std::rc::Rc;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     Number(f64),
+    Bool(bool),
     String(Rc<String>),
+    Null,
+}
+
+macro_rules! runtime_error {
+    ($msg:expr) => {{
+        eprintln!("{}", $msg);
+        std::process::exit(1);
+    }};
 }
 
 impl std::ops::Add for Object {
@@ -13,7 +22,7 @@ impl std::ops::Add for Object {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a + b).into(),
-            _ => unreachable!(),
+            _ => runtime_error!("You can only + numbers."),
         }
     }
 }
@@ -24,7 +33,7 @@ impl std::ops::Sub for Object {
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a - b).into(),
-            _ => unreachable!(),
+            _ => runtime_error!("You can only - numbers."),
         }
     }
 }
@@ -35,7 +44,7 @@ impl std::ops::Mul for Object {
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a * b).into(),
-            _ => unreachable!(),
+            _ => runtime_error!("You can only * numbers."),
         }
     }
 }
@@ -46,8 +55,25 @@ impl std::ops::Div for Object {
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a / b).into(),
-            _ => unreachable!(),
+            _ => runtime_error!("You can only / numbers."),
         }
+    }
+}
+
+impl std::ops::Not for Object {
+    type Output = Object;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Object::Bool(b) => (!b).into(),
+            _ => runtime_error!("You can only ! booleans."),
+        }
+    }
+}
+
+impl From<bool> for Object {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
     }
 }
 
@@ -104,6 +130,9 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
                 Opcode::Sub => self.handle_op_sub(),
                 Opcode::Mul => self.handle_op_mul(),
                 Opcode::Div => self.handle_op_div(),
+                Opcode::False => self.handle_op_false(),
+                Opcode::Not => self.handle_op_not(),
+                Opcode::Null => self.handle_op_null(),
                 Opcode::Halt => break,
             }
 
@@ -147,5 +176,18 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
 
     fn handle_op_div(&mut self) {
         binop!(self, /);
+    }
+
+    fn handle_op_false(&mut self) {
+        self.stack.push(false.into());
+    }
+
+    fn handle_op_not(&mut self) {
+        let obj = self.stack.pop().unwrap();
+        self.stack.push(!obj);
+    }
+
+    fn handle_op_null(&mut self) {
+        self.stack.push(Object::Null);
     }
 }

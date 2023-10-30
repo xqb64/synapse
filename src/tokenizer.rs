@@ -4,6 +4,9 @@ use regex::Regex;
 pub enum TokenKind {
     Print,
     Number,
+    True,
+    False,
+    Null,
     Plus,
     Minus,
     Star,
@@ -34,14 +37,15 @@ impl<'source> Iterator for Tokenizer<'source> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let re_keyword = r"?P<keyword>print";
+        let re_literal = r"?P<literal>true|false|null";
         let re_individual = r"?P<individual>[-+*/;]";
         let re_number = r"?P<number>[-+]?\d+(\.\d+)?";
         let re_string = r#""(?P<string>[^\n"]*)""#;
 
         let r = Regex::new(
             format!(
-                "({})|({})|({})|({})",
-                re_keyword, re_individual, re_number, re_string,
+                "({})|({})|({})|({})|({})",
+                re_keyword, re_literal, re_individual, re_number, re_string,
             )
             .as_str(),
         )
@@ -53,6 +57,14 @@ impl<'source> Iterator for Tokenizer<'source> {
                     self.start = m.end();
                     match m.as_str() {
                         "print" => Token::new(TokenKind::Print, "print"),
+                        _ => unreachable!(),
+                    }
+                } else if let Some(m) = captures.name("literal") {
+                    self.start = m.end();
+                    match m.as_str() {
+                        "true" => Token::new(TokenKind::True, "true"),
+                        "false" => Token::new(TokenKind::False, "false"),
+                        "null" => Token::new(TokenKind::Null, "null"),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("individual") {

@@ -117,6 +117,14 @@ impl<'source> Parser<'source> {
             Expression::Literal(LiteralExpression {
                 value: Literal::Num(n),
             })
+        } else if self.is_next(&[TokenKind::True, TokenKind::False, TokenKind::Null]) {
+            let literal: Literal = self
+                .previous
+                .unwrap()
+                .value
+                .parse()
+                .expect("Failed to parse a literal.");
+            Expression::Literal(LiteralExpression { value: literal })
         } else {
             unreachable!();
         }
@@ -170,4 +178,18 @@ pub enum BinaryExpressionKind {
 pub enum Literal<'source> {
     Num(f64),
     String(&'source str),
+    Bool(bool),
+    Null,
+}
+
+impl<'source> std::str::FromStr for Literal<'source> {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "true" => Ok(Literal::Bool(true)),
+            "false" => Ok(Literal::Bool(false)),
+            "null" => Ok(Literal::Null),
+            _ => Err(format!("{} is not a valid object literal", s)),
+        }
+    }
 }

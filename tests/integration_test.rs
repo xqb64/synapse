@@ -30,6 +30,18 @@ fn fetch_stdout(path: &str) -> (VecDeque<String>, VecDeque<String>) {
     (stdout_split, filtered)
 }
 
+fn fetch_stderr(path: &str) -> VecDeque<String> {
+    let mut cmd = assert_cmd::Command::cargo_bin("synapse").unwrap();
+    let assert = cmd.arg(path).assert();
+    let output = assert.get_output();
+    let stderr = String::from_utf8(output.stderr.clone()).unwrap();
+    let split: VecDeque<String> = stderr
+        .split('\n')
+        .filter_map(|l| (!l.is_empty()).then_some(l.to_owned()))
+        .collect();
+    split
+}
+
 macro_rules! run_test {
     ($path:expr, $expected:expr) => {{
         let (mut stdout, mut filtered) = fetch_stdout($path);
@@ -41,10 +53,23 @@ macro_rules! run_test {
     }};
 }
 
+macro_rules! run_test_error {
+    ($path:expr, $expected:expr) => {{
+        let mut stderr = fetch_stderr($path);
+        assert!(stderr.pop_back().unwrap() == $expected);
+    }};
+}
+
 #[test]
 fn add() {
     let (path, expected) = ("tests/cases/add.syn", object_vec![15.0]);
     run_test!(path, expected);
+}
+
+#[test]
+fn add_error() {
+    let (path, expected) = ("tests/cases/add_error.syn", "You can only + numbers.");
+    run_test_error!(path, expected);
 }
 
 #[test]
