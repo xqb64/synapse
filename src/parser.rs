@@ -72,7 +72,7 @@ impl<'source> Parser<'source> {
     }
 
     fn equality(&mut self) -> Expression<'source> {
-        let mut result = self.term();
+        let mut result = self.relational();
         while self.is_next(&[TokenKind::DoubleEqual, TokenKind::BangEqual]) {
             let negation = match self.previous.unwrap().kind {
                 TokenKind::BangEqual => true,
@@ -81,6 +81,33 @@ impl<'source> Parser<'source> {
             };
             result = Expression::Binary(BinaryExpression {
                 kind: BinaryExpressionKind::Equality(negation),
+                lhs: Box::new(result),
+                rhs: Box::new(self.relational()),
+            });
+        }
+        result
+    }
+
+    fn relational(&mut self) -> Expression<'source> {
+        let mut result = self.term();
+        while self.is_next(&[
+            TokenKind::Less,
+            TokenKind::Greater,
+            TokenKind::LessEqual,
+            TokenKind::GreaterEqual,
+        ]) {
+            let kind = match self.previous {
+                Some(token) => match token.kind {
+                    TokenKind::Less => BinaryExpressionKind::Less,
+                    TokenKind::Greater => BinaryExpressionKind::Greater,
+                    TokenKind::LessEqual => BinaryExpressionKind::LessEqual,
+                    TokenKind::GreaterEqual => BinaryExpressionKind::GreaterEqual,
+                    _ => unreachable!(),
+                },
+                None => unreachable!(),
+            };
+            result = Expression::Binary(BinaryExpression {
+                kind,
                 lhs: Box::new(result),
                 rhs: Box::new(self.term()),
             });
@@ -189,6 +216,10 @@ pub enum BinaryExpressionKind {
     Mul,
     Div,
     Equality(bool), /* negation */
+    Less,
+    Greater,
+    LessEqual,
+    GreaterEqual,
 }
 
 #[allow(dead_code)]

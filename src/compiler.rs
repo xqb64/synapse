@@ -108,6 +108,18 @@ impl<'source> Codegen<'source> for BinaryExpression<'source> {
                     compiler.emit_bytes(&[Opcode::Not]);
                 }
             }
+            BinaryExpressionKind::Less => {
+                compiler.emit_bytes(&[Opcode::Lt]);
+            }
+            BinaryExpressionKind::Greater => {
+                compiler.emit_bytes(&[Opcode::Gt]);
+            }
+            BinaryExpressionKind::LessEqual => {
+                compiler.emit_bytes(&[Opcode::Gt, Opcode::Not]);
+            }
+            BinaryExpressionKind::GreaterEqual => {
+                compiler.emit_bytes(&[Opcode::Lt, Opcode::Not]);
+            }
         }
     }
 }
@@ -124,6 +136,8 @@ pub enum Opcode<'source> {
     Not,
     Null,
     Eq,
+    Lt,
+    Gt,
     Str(&'source str),
     Halt,
 }

@@ -101,3 +101,21 @@ fn eq() {
     );
     run_test!(path, expected);
 }
+
+#[test]
+fn relational() {
+    let (path, expected) = (
+        "tests/cases/relational.syn",
+        object_vec![true, false, true, false],
+    );
+    run_test!(path, expected);
+}
+
+#[test]
+fn relational_error() {
+    let (path, expected) = (
+        "tests/cases/relational_error.syn",
+        "You can only <, >, <=, >= numbers.",
+    );
+    run_test_error!(path, expected);
+}

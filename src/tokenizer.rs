@@ -11,6 +11,10 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    Less,
+    Greater,
+    LessEqual,
+    GreaterEqual,
     BangEqual,
     DoubleEqual,
     String,
@@ -40,8 +44,8 @@ impl<'source> Iterator for Tokenizer<'source> {
     fn next(&mut self) -> Option<Self::Item> {
         let re_keyword = r"?P<keyword>print";
         let re_literal = r"?P<literal>true|false|null";
-        let re_individual = r"?P<individual>[-+*/;]";
-        let re_double = r"?P<double>==|!=|\+\+";
+        let re_individual = r"?P<individual>[-+*/<>;]";
+        let re_double = r"?P<double>==|!=|<=|>=|\+\+";
         let re_number = r"?P<number>[-+]?\d+(\.\d+)?";
         let re_string = r#""(?P<string>[^\n"]*)""#;
 
@@ -77,6 +81,8 @@ impl<'source> Iterator for Tokenizer<'source> {
                         "-" => Token::new(TokenKind::Minus, "-"),
                         "*" => Token::new(TokenKind::Star, "*"),
                         "/" => Token::new(TokenKind::Slash, "/"),
+                        "<" => Token::new(TokenKind::Less, "<"),
+                        ">" => Token::new(TokenKind::Greater, ">"),
                         ";" => Token::new(TokenKind::Semicolon, ";"),
                         _ => unreachable!(),
                     }
@@ -85,6 +91,8 @@ impl<'source> Iterator for Tokenizer<'source> {
                     match m.as_str() {
                         "==" => Token::new(TokenKind::DoubleEqual, "=="),
                         "!=" => Token::new(TokenKind::BangEqual, "!="),
+                        "<=" => Token::new(TokenKind::LessEqual, "<="),
+                        ">=" => Token::new(TokenKind::GreaterEqual, ">="),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("number") {

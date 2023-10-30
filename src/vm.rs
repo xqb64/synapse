@@ -71,6 +71,15 @@ impl std::ops::Not for Object {
     }
 }
 
+impl std::cmp::PartialOrd for Object {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Object::Number(a), Object::Number(b)) => a.partial_cmp(b),
+            _ => runtime_error!("You can only <, >, <=, >= numbers."),
+        }
+    }
+}
+
 impl From<bool> for Object {
     fn from(value: bool) -> Self {
         Self::Bool(value)
@@ -134,6 +143,8 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
                 Opcode::Not => self.handle_op_not(),
                 Opcode::Null => self.handle_op_null(),
                 Opcode::Eq => self.handle_op_eq(),
+                Opcode::Lt => self.handle_op_lt(),
+                Opcode::Gt => self.handle_op_gt(),
                 Opcode::Halt => break,
             }
 
@@ -194,5 +205,13 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
 
     fn handle_op_eq(&mut self) {
         binop!(self, ==);
+    }
+
+    fn handle_op_lt(&mut self) {
+        binop!(self, <);
+    }
+
+    fn handle_op_gt(&mut self) {
+        binop!(self, >);
     }
 }
