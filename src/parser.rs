@@ -409,7 +409,6 @@ pub enum BinaryExpressionKind {
     Strcat,
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Literal<'src> {
     Num(f64),
