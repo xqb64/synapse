@@ -3,13 +3,16 @@ use crate::parser::{
     Expression, ExpressionStatement, FnStatement, IfStatement, Literal, LiteralExpression,
     PrintStatement, ReturnStatement, Statement, VariableExpression, WhileStatement,
 };
+use std::collections::HashMap;
+
+const CAPACITY_MIN: usize = 1024;
 
 pub struct Compiler<'src> {
     bytecode: Vec<Opcode<'src>>,
-    functions: std::collections::HashMap<&'src str, usize>,
+    functions: HashMap<&'src str, usize>,
     locals: Vec<&'src str>,
     depth: usize,
-    pops: [usize; 1024],
+    pops: [usize; CAPACITY_MIN],
 }
 
 impl Default for Compiler<'_> {
@@ -21,15 +24,15 @@ impl Default for Compiler<'_> {
 impl<'src> Compiler<'src> {
     pub fn new() -> Self {
         Compiler {
-            bytecode: Vec::new(),
-            functions: std::collections::HashMap::new(),
-            locals: Vec::new(),
+            bytecode: Vec::with_capacity(CAPACITY_MIN),
+            functions: HashMap::with_capacity(CAPACITY_MIN),
+            locals: Vec::with_capacity(CAPACITY_MIN),
             depth: 0,
-            pops: [0; 1024],
+            pops: [0; CAPACITY_MIN],
         }
     }
 
-    pub fn compile(&mut self, ast: Vec<Statement<'src>>) -> &[Opcode<'src>] {
+    pub fn compile(&mut self, ast: &[Statement<'src>]) -> &[Opcode<'src>] {
         for statement in ast {
             statement.codegen(self);
         }
@@ -52,7 +55,15 @@ impl<'src> Compiler<'src> {
     }
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
-        self.locals.iter().position(|local| *local == name)
+        self.locals.iter().position(|&local| local == name)
+    }
+
+    fn patch_jmp(&mut self, idx: usize) {
+        let v = self.bytecode.len() - 1;
+        match self.bytecode[idx] {
+            Opcode::Jmp(ref mut addr) | Opcode::Jz(ref mut addr) => *addr = v,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -98,7 +109,7 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
 
         compiler.emit_opcodes(&[Opcode::Null, Opcode::Ret]);
 
-        compiler.bytecode[jmp_idx] = Opcode::Jmp(compiler.bytecode.len() - 1);
+        compiler.patch_jmp(jmp_idx);
 
         compiler.locals.clear();
     }
@@ -110,11 +121,11 @@ impl<'src> Codegen<'src> for IfStatement<'src> {
 
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
         self.if_branch.codegen(compiler);
-        compiler.bytecode[jz_idx] = Opcode::Jz(compiler.bytecode.len() - 1);
+        compiler.patch_jmp(jz_idx);
 
         let else_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
         self.else_branch.codegen(compiler);
-        compiler.bytecode[else_idx] = Opcode::Jmp(compiler.bytecode.len() - 1);
+        compiler.patch_jmp(else_idx);
     }
 }
 
@@ -125,7 +136,7 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
         self.body.codegen(compiler);
         compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
-        compiler.bytecode[jz_idx] = Opcode::Jz(compiler.bytecode.len() - 1);
+        compiler.patch_jmp(jz_idx);
     }
 }
 

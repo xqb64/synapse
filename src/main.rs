@@ -13,8 +13,9 @@ fn main() -> Result<(), std::io::Error> {
             let tokenizer = Tokenizer::new(&src);
             let mut parser = Parser::default();
             let mut compiler = Compiler::default();
-            let ast = parser.parse(tokenizer.into_iter().collect());
-            let bytecode = compiler.compile(ast);
+            let mut tokens = tokenizer.into_iter().collect();
+            let ast = parser.parse(&mut tokens);
+            let bytecode = compiler.compile(&ast);
             let mut vm = VM::new(bytecode);
             vm.run();
         }

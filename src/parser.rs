@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 pub struct Parser<'src> {
     current: Option<Token<'src>>,
     previous: Option<Token<'src>>,
-    tokens: VecDeque<Token<'src>>,
+    tokens: Option<&'src mut VecDeque<Token<'src>>>,
 }
 
 impl<'src> Parser<'src> {
@@ -12,12 +12,12 @@ impl<'src> Parser<'src> {
         Parser {
             current: None,
             previous: None,
-            tokens: VecDeque::new(),
+            tokens: None,
         }
     }
 
-    pub fn parse(&mut self, tokens: VecDeque<Token<'src>>) -> Vec<Statement<'src>> {
-        self.tokens = tokens;
+    pub fn parse(&mut self, tokens: &'src mut VecDeque<Token<'src>>) -> Vec<Statement<'src>> {
+        self.tokens = Some(tokens);
         self.advance();
         let mut statements = vec![];
         while self.current.is_some() {
@@ -42,7 +42,7 @@ impl<'src> Parser<'src> {
 
     fn advance(&mut self) -> Option<Token<'src>> {
         self.previous = self.current;
-        self.current = self.tokens.pop_front();
+        self.current = self.tokens.as_mut().and_then(|tokens| tokens.pop_front());
         self.previous
     }
 
@@ -270,7 +270,6 @@ impl<'src> Parser<'src> {
 
     fn primary(&mut self) -> Expression<'src> {
         if self.is_next(&[TokenKind::Number]) {
-            println!("{:?}", self.previous);
             let n = self.previous.unwrap().value.parse().unwrap();
             Expression::Literal(LiteralExpression {
                 value: Literal::Num(n),
@@ -288,18 +287,16 @@ impl<'src> Parser<'src> {
             Expression::Variable(VariableExpression { value: var })
         } else if self.is_next(&[TokenKind::String]) {
             let string = self.previous.unwrap().value;
-            println!("got string: {}", string);
             Expression::Literal(LiteralExpression {
                 value: Literal::String(string),
             })
         } else {
-            println!("{:?}", self.current);
             todo!();
         }
     }
 }
 
-impl<'src> Default for Parser<'src> {
+impl Default for Parser<'_> {
     fn default() -> Self {
         Self::new()
     }

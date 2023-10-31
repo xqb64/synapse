@@ -10,8 +10,9 @@ fn criterion_benchmark_fib30(c: &mut Criterion) {
     let tokenizer = Tokenizer::new(&src);
     let mut parser = Parser::default();
     let mut compiler = Compiler::default();
-    let ast = parser.parse(tokenizer.into_iter().collect());
-    let bytecode = compiler.compile(ast);
+    let mut tokens = tokenizer.into_iter().collect();
+    let ast = parser.parse(&mut tokens);
+    let bytecode = compiler.compile(&ast);
     let mut vm = VM::new(bytecode);
 
     c.bench_function("fib 30", |b| b.iter(|| vm.run()));
