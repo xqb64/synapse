@@ -126,8 +126,8 @@ macro_rules! adjust_idx {
     }};
 }
 
-pub struct VM<'source, 'bytecode> {
-    bytecode: &'bytecode [Opcode<'source>],
+pub struct VM<'src, 'bytecode> {
+    bytecode: &'bytecode [Opcode<'src>],
     stack: Vec<Object>,
     frame_ptrs: Vec<InternalObject>,
     ip: usize,
@@ -135,8 +135,8 @@ pub struct VM<'source, 'bytecode> {
 
 const STACK_MIN: usize = 1024;
 
-impl<'source, 'bytecode> VM<'source, 'bytecode> {
-    pub fn new(bytecode: &'bytecode [Opcode<'source>]) -> VM<'source, 'bytecode> {
+impl<'src, 'bytecode> VM<'src, 'bytecode> {
+    pub fn new(bytecode: &'bytecode [Opcode<'src>]) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
             stack: Vec::with_capacity(STACK_MIN),

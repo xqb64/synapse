@@ -1,13 +1,13 @@
 use crate::tokenizer::{Token, TokenKind};
 use std::collections::VecDeque;
 
-pub struct Parser<'source> {
-    current: Option<Token<'source>>,
-    previous: Option<Token<'source>>,
-    tokens: VecDeque<Token<'source>>,
+pub struct Parser<'src> {
+    current: Option<Token<'src>>,
+    previous: Option<Token<'src>>,
+    tokens: VecDeque<Token<'src>>,
 }
 
-impl<'source> Parser<'source> {
+impl<'src> Parser<'src> {
     pub fn new() -> Self {
         Parser {
             current: None,
@@ -16,7 +16,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    pub fn parse(&mut self, tokens: VecDeque<Token<'source>>) -> Vec<Statement<'source>> {
+    pub fn parse(&mut self, tokens: VecDeque<Token<'src>>) -> Vec<Statement<'src>> {
         self.tokens = tokens;
         self.advance();
         let mut statements = vec![];
@@ -40,20 +40,20 @@ impl<'source> Parser<'source> {
         self.current.unwrap().kind == kind
     }
 
-    fn advance(&mut self) -> Option<Token<'source>> {
+    fn advance(&mut self) -> Option<Token<'src>> {
         self.previous = self.current;
         self.current = self.tokens.pop_front();
         self.previous
     }
 
-    fn consume(&mut self, kind: TokenKind) -> Option<Token<'source>> {
+    fn consume(&mut self, kind: TokenKind) -> Option<Token<'src>> {
         if self.check(kind) {
             return self.advance();
         }
         None
     }
 
-    fn parse_statement(&mut self) -> Statement<'source> {
+    fn parse_statement(&mut self) -> Statement<'src> {
         if self.is_next(&[TokenKind::Print]) {
             self.parse_print_statement()
         } else if self.is_next(&[TokenKind::Fn]) {
@@ -71,13 +71,13 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_print_statement(&mut self) -> Statement<'source> {
+    fn parse_print_statement(&mut self) -> Statement<'src> {
         let expression = self.parse_expression();
         self.consume(TokenKind::Semicolon);
         Statement::Print(PrintStatement { expression })
     }
 
-    fn parse_fn_statement(&mut self) -> Statement<'source> {
+    fn parse_fn_statement(&mut self) -> Statement<'src> {
         let name = self.consume(TokenKind::Identifier).unwrap();
         self.consume(TokenKind::LeftParen);
         let mut arguments = vec![];
@@ -95,13 +95,13 @@ impl<'source> Parser<'source> {
         })
     }
 
-    fn parse_return_statement(&mut self) -> Statement<'source> {
+    fn parse_return_statement(&mut self) -> Statement<'src> {
         let expression = self.parse_expression();
         self.consume(TokenKind::Semicolon);
         Statement::Return(ReturnStatement { expression })
     }
 
-    fn parse_if_statement(&mut self) -> Statement<'source> {
+    fn parse_if_statement(&mut self) -> Statement<'src> {
         self.consume(TokenKind::LeftParen);
         let condition = self.parse_expression();
         self.consume(TokenKind::RightParen);
@@ -118,7 +118,7 @@ impl<'source> Parser<'source> {
         })
     }
 
-    fn parse_while_statement(&mut self) -> Statement<'source> {
+    fn parse_while_statement(&mut self) -> Statement<'src> {
         self.consume(TokenKind::LeftParen);
         let condition = self.parse_expression();
         self.consume(TokenKind::RightParen);
@@ -129,7 +129,7 @@ impl<'source> Parser<'source> {
         })
     }
 
-    fn parse_block_statement(&mut self) -> Statement<'source> {
+    fn parse_block_statement(&mut self) -> Statement<'src> {
         let mut body = vec![];
         while !self.is_next(&[TokenKind::RightBrace]) {
             body.push(self.parse_statement());
@@ -137,17 +137,17 @@ impl<'source> Parser<'source> {
         Statement::Block(BlockStatement { body })
     }
 
-    fn parse_expression_statement(&mut self) -> Statement<'source> {
+    fn parse_expression_statement(&mut self) -> Statement<'src> {
         let expr = self.parse_expression();
         self.consume(TokenKind::Semicolon);
         Statement::Expression(ExpressionStatement { expression: expr })
     }
 
-    fn parse_expression(&mut self) -> Expression<'source> {
+    fn parse_expression(&mut self) -> Expression<'src> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Expression<'source> {
+    fn assignment(&mut self) -> Expression<'src> {
         let mut result = self.equality();
         while self.is_next(&[TokenKind::Equal]) {
             result = Expression::Assign(AssignExpression {
@@ -158,7 +158,7 @@ impl<'source> Parser<'source> {
         result
     }
 
-    fn equality(&mut self) -> Expression<'source> {
+    fn equality(&mut self) -> Expression<'src> {
         let mut result = self.relational();
         while self.is_next(&[TokenKind::DoubleEqual, TokenKind::BangEqual]) {
             let negation = match self.previous.unwrap().kind {
@@ -175,7 +175,7 @@ impl<'source> Parser<'source> {
         result
     }
 
-    fn relational(&mut self) -> Expression<'source> {
+    fn relational(&mut self) -> Expression<'src> {
         let mut result = self.term();
         while self.is_next(&[
             TokenKind::Less,
@@ -202,7 +202,7 @@ impl<'source> Parser<'source> {
         result
     }
 
-    fn term(&mut self) -> Expression<'source> {
+    fn term(&mut self) -> Expression<'src> {
         let mut result = self.factor();
         while self.is_next(&[TokenKind::Plus, TokenKind::Minus, TokenKind::PlusPlus]) {
             let kind = match self.previous {
@@ -223,7 +223,7 @@ impl<'source> Parser<'source> {
         result
     }
 
-    fn factor(&mut self) -> Expression<'source> {
+    fn factor(&mut self) -> Expression<'src> {
         let mut result = self.call();
         while self.is_next(&[TokenKind::Star, TokenKind::Slash]) {
             let kind = match self.previous {
@@ -243,7 +243,7 @@ impl<'source> Parser<'source> {
         result
     }
 
-    fn call(&mut self) -> Expression<'source> {
+    fn call(&mut self) -> Expression<'src> {
         let mut expr = self.primary();
         if self.is_next(&[TokenKind::LeftParen]) {
             let mut arguments = vec![];
@@ -268,7 +268,7 @@ impl<'source> Parser<'source> {
         expr
     }
 
-    fn primary(&mut self) -> Expression<'source> {
+    fn primary(&mut self) -> Expression<'src> {
         if self.is_next(&[TokenKind::Number]) {
             println!("{:?}", self.previous);
             let n = self.previous.unwrap().value.parse().unwrap();
@@ -299,100 +299,100 @@ impl<'source> Parser<'source> {
     }
 }
 
-impl<'source> Default for Parser<'source> {
+impl<'src> Default for Parser<'src> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[derive(Debug)]
-pub enum Statement<'source> {
-    Print(PrintStatement<'source>),
-    Fn(FnStatement<'source>),
-    Return(ReturnStatement<'source>),
-    If(IfStatement<'source>),
-    While(WhileStatement<'source>),
-    Block(BlockStatement<'source>),
-    Expression(ExpressionStatement<'source>),
+pub enum Statement<'src> {
+    Print(PrintStatement<'src>),
+    Fn(FnStatement<'src>),
+    Return(ReturnStatement<'src>),
+    If(IfStatement<'src>),
+    While(WhileStatement<'src>),
+    Block(BlockStatement<'src>),
+    Expression(ExpressionStatement<'src>),
     Dummy,
 }
 
 #[derive(Debug)]
-pub struct PrintStatement<'source> {
-    pub expression: Expression<'source>,
+pub struct PrintStatement<'src> {
+    pub expression: Expression<'src>,
 }
 
 #[derive(Debug)]
-pub struct FnStatement<'source> {
-    pub name: &'source str,
-    pub arguments: Vec<&'source str>,
-    pub body: Box<Statement<'source>>,
+pub struct FnStatement<'src> {
+    pub name: &'src str,
+    pub arguments: Vec<&'src str>,
+    pub body: Box<Statement<'src>>,
 }
 
 #[derive(Debug)]
-pub struct ReturnStatement<'source> {
-    pub expression: Expression<'source>,
+pub struct ReturnStatement<'src> {
+    pub expression: Expression<'src>,
 }
 
 #[derive(Debug)]
-pub struct IfStatement<'source> {
-    pub condition: Expression<'source>,
-    pub if_branch: Box<Statement<'source>>,
-    pub else_branch: Box<Statement<'source>>,
+pub struct IfStatement<'src> {
+    pub condition: Expression<'src>,
+    pub if_branch: Box<Statement<'src>>,
+    pub else_branch: Box<Statement<'src>>,
 }
 
 #[derive(Debug)]
-pub struct WhileStatement<'source> {
-    pub condition: Expression<'source>,
-    pub body: Box<Statement<'source>>,
+pub struct WhileStatement<'src> {
+    pub condition: Expression<'src>,
+    pub body: Box<Statement<'src>>,
 }
 
 #[derive(Debug)]
-pub struct BlockStatement<'source> {
-    pub body: Vec<Statement<'source>>,
+pub struct BlockStatement<'src> {
+    pub body: Vec<Statement<'src>>,
 }
 
 #[derive(Debug)]
-pub struct ExpressionStatement<'source> {
-    pub expression: Expression<'source>,
+pub struct ExpressionStatement<'src> {
+    pub expression: Expression<'src>,
 }
 
 #[derive(Debug)]
-pub enum Expression<'source> {
-    Literal(LiteralExpression<'source>),
-    Variable(VariableExpression<'source>),
-    Binary(BinaryExpression<'source>),
-    Call(CallExpression<'source>),
-    Assign(AssignExpression<'source>),
+pub enum Expression<'src> {
+    Literal(LiteralExpression<'src>),
+    Variable(VariableExpression<'src>),
+    Binary(BinaryExpression<'src>),
+    Call(CallExpression<'src>),
+    Assign(AssignExpression<'src>),
 }
 
 #[derive(Debug)]
-pub struct LiteralExpression<'source> {
-    pub value: Literal<'source>,
+pub struct LiteralExpression<'src> {
+    pub value: Literal<'src>,
 }
 
 #[derive(Debug)]
-pub struct VariableExpression<'source> {
-    pub value: &'source str,
+pub struct VariableExpression<'src> {
+    pub value: &'src str,
 }
 
 #[derive(Debug)]
-pub struct BinaryExpression<'source> {
+pub struct BinaryExpression<'src> {
     pub kind: BinaryExpressionKind,
-    pub lhs: Box<Expression<'source>>,
-    pub rhs: Box<Expression<'source>>,
+    pub lhs: Box<Expression<'src>>,
+    pub rhs: Box<Expression<'src>>,
 }
 
 #[derive(Debug)]
-pub struct CallExpression<'source> {
-    pub variable: &'source str,
-    pub arguments: Vec<Expression<'source>>,
+pub struct CallExpression<'src> {
+    pub variable: &'src str,
+    pub arguments: Vec<Expression<'src>>,
 }
 
 #[derive(Debug)]
-pub struct AssignExpression<'source> {
-    pub lhs: Box<Expression<'source>>,
-    pub rhs: Box<Expression<'source>>,
+pub struct AssignExpression<'src> {
+    pub lhs: Box<Expression<'src>>,
+    pub rhs: Box<Expression<'src>>,
 }
 
 #[derive(Debug)]
@@ -411,14 +411,14 @@ pub enum BinaryExpressionKind {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub enum Literal<'source> {
+pub enum Literal<'src> {
     Num(f64),
-    String(&'source str),
+    String(&'src str),
     Bool(bool),
     Null,
 }
 
-impl<'source> std::str::FromStr for Literal<'source> {
+impl<'src> std::str::FromStr for Literal<'src> {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {

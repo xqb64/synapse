@@ -35,24 +35,24 @@ pub enum TokenKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Token<'source> {
+pub struct Token<'src> {
     pub kind: TokenKind,
-    pub value: &'source str,
+    pub value: &'src str,
 }
 
-impl<'source> Token<'source> {
-    fn new(kind: TokenKind, value: &'source str) -> Token<'source> {
+impl<'src> Token<'src> {
+    fn new(kind: TokenKind, value: &'src str) -> Token<'src> {
         Token { kind, value }
     }
 }
 
-pub struct Tokenizer<'source> {
-    src: &'source str,
+pub struct Tokenizer<'src> {
+    src: &'src str,
     start: usize,
 }
 
-impl<'source> Iterator for Tokenizer<'source> {
-    type Item = Token<'source>;
+impl<'src> Iterator for Tokenizer<'src> {
+    type Item = Token<'src>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let re_keyword = r"?P<keyword>print|fn|return|if|else|while";
@@ -147,8 +147,8 @@ impl<'source> Iterator for Tokenizer<'source> {
     }
 }
 
-impl<'source> Tokenizer<'source> {
-    pub fn new(src: &'source str) -> Tokenizer<'source> {
+impl<'src> Tokenizer<'src> {
+    pub fn new(src: &'src str) -> Tokenizer<'src> {
         Tokenizer { src, start: 0 }
     }
 }

@@ -4,10 +4,10 @@ use crate::parser::{
     PrintStatement, ReturnStatement, Statement, VariableExpression, WhileStatement,
 };
 
-pub struct Compiler<'source> {
-    bytecode: Vec<Opcode<'source>>,
-    functions: std::collections::HashMap<&'source str, usize>,
-    locals: Vec<&'source str>,
+pub struct Compiler<'src> {
+    bytecode: Vec<Opcode<'src>>,
+    functions: std::collections::HashMap<&'src str, usize>,
+    locals: Vec<&'src str>,
     depth: usize,
     pops: [usize; 1024],
 }
@@ -18,7 +18,7 @@ impl Default for Compiler<'_> {
     }
 }
 
-impl<'source> Compiler<'source> {
+impl<'src> Compiler<'src> {
     pub fn new() -> Self {
         Compiler {
             bytecode: Vec::new(),
@@ -29,7 +29,7 @@ impl<'source> Compiler<'source> {
         }
     }
 
-    pub fn compile(&mut self, ast: Vec<Statement<'source>>) -> &[Opcode<'source>] {
+    pub fn compile(&mut self, ast: Vec<Statement<'src>>) -> &[Opcode<'src>] {
         for statement in ast {
             statement.codegen(self);
         }
@@ -37,7 +37,7 @@ impl<'source> Compiler<'source> {
         self.bytecode.as_slice()
     }
 
-    fn emit_bytes(&mut self, opcodes: &[Opcode<'source>]) -> usize {
+    fn emit_bytes(&mut self, opcodes: &[Opcode<'src>]) -> usize {
         for opcode in opcodes {
             self.bytecode.push(*opcode);
         }
@@ -56,8 +56,8 @@ impl<'source> Compiler<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for Statement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for Statement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         match self {
             Statement::Print(print_statement) => print_statement.codegen(compiler),
             Statement::Fn(fn_statement) => fn_statement.codegen(compiler),
@@ -71,15 +71,15 @@ impl<'source> Codegen<'source> for Statement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for PrintStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for PrintStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         self.expression.codegen(compiler);
         compiler.emit_bytes(&[Opcode::Print]);
     }
 }
 
-impl<'source> Codegen<'source> for FnStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for FnStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         let jmp_idx = compiler.emit_bytes(&[Opcode::Jmp(0xFFFF)]);
 
         compiler.functions.insert(self.name, jmp_idx);
@@ -104,8 +104,8 @@ impl<'source> Codegen<'source> for FnStatement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for IfStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for IfStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         self.condition.codegen(compiler);
 
         let jz_idx = compiler.emit_bytes(&[Opcode::Jz(0xFFFF)]);
@@ -118,8 +118,8 @@ impl<'source> Codegen<'source> for IfStatement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for WhileStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for WhileStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         let loop_start = compiler.bytecode.len() - 1;
         self.condition.codegen(compiler);
         let jz_idx = compiler.emit_bytes(&[Opcode::Jz(0xFFFF)]);
@@ -129,8 +129,8 @@ impl<'source> Codegen<'source> for WhileStatement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for ExpressionStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for ExpressionStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         match &self.expression {
             Expression::Call(call_expr) => {
                 call_expr.codegen(compiler);
@@ -144,8 +144,8 @@ impl<'source> Codegen<'source> for ExpressionStatement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for ReturnStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for ReturnStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         self.expression.codegen(compiler);
         let mut deepset_no = compiler.locals.len() - 1;
         for _ in 0..compiler.locals.len() {
@@ -156,8 +156,8 @@ impl<'source> Codegen<'source> for ReturnStatement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for BlockStatement<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for BlockStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         compiler.depth += 1;
         for statement in &self.body {
             statement.codegen(compiler);
@@ -167,8 +167,8 @@ impl<'source> Codegen<'source> for BlockStatement<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for Expression<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for Expression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         match self {
             Expression::Literal(literal) => literal.codegen(compiler),
             Expression::Variable(varexp) => varexp.codegen(compiler),
@@ -179,8 +179,8 @@ impl<'source> Codegen<'source> for Expression<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for LiteralExpression<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for LiteralExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         match &self.value {
             Literal::Num(n) => {
                 compiler.emit_bytes(&[Opcode::Const(*n)]);
@@ -203,8 +203,8 @@ impl<'source> Codegen<'source> for LiteralExpression<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for VariableExpression<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for VariableExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         let local = compiler.resolve_local(self.value);
 
         if let Some(idx) = local {
@@ -217,8 +217,8 @@ impl<'source> Codegen<'source> for VariableExpression<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for BinaryExpression<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for BinaryExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         self.lhs.codegen(compiler);
         self.rhs.codegen(compiler);
 
@@ -260,8 +260,8 @@ impl<'source> Codegen<'source> for BinaryExpression<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for CallExpression<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for CallExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         for argument in &self.arguments {
             argument.codegen(compiler);
         }
@@ -272,8 +272,8 @@ impl<'source> Codegen<'source> for CallExpression<'source> {
     }
 }
 
-impl<'source> Codegen<'source> for AssignExpression<'source> {
-    fn codegen(&self, compiler: &mut Compiler<'source>) {
+impl<'src> Codegen<'src> for AssignExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
         let variable_name = match &*self.lhs {
             Expression::Variable(variable) => &variable.value,
             _ => unimplemented!(),
@@ -292,7 +292,7 @@ impl<'source> Codegen<'source> for AssignExpression<'source> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Opcode<'source> {
+pub enum Opcode<'src> {
     Print,
     Const(f64),
     Add,
@@ -305,7 +305,7 @@ pub enum Opcode<'source> {
     Eq,
     Lt,
     Gt,
-    Str(&'source str),
+    Str(&'src str),
     Jmp(usize),
     Jz(usize),
     Call(usize),
@@ -317,6 +317,6 @@ pub enum Opcode<'source> {
     Halt,
 }
 
-trait Codegen<'source> {
-    fn codegen(&self, _compiler: &mut Compiler<'source>) {}
+trait Codegen<'src> {
+    fn codegen(&self, _compiler: &mut Compiler<'src>) {}
 }
