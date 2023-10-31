@@ -5,7 +5,7 @@ use std::rc::Rc;
 pub enum Object {
     Number(f64),
     Bool(bool),
-    String(Rc<str>),
+    String(Rc<String>),
     Null,
 }
 
