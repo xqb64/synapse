@@ -1,0 +1,7 @@
+fn main() {
+    x = "Hello, ";
+    y = "world!";
+    return x ++ y;
+}
+
+print main();

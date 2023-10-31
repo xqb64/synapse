@@ -5,7 +5,7 @@ use std::rc::Rc;
 pub enum Object {
     Number(f64),
     Bool(bool),
-    String(Rc<String>),
+    String(Rc<str>),
     Null,
 }
 
@@ -171,6 +171,7 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
                 Opcode::Ret => self.handle_op_ret(),
                 Opcode::Deepget(idx) => self.handle_op_deepget(idx),
                 Opcode::Deepset(idx) => self.handle_op_deepset(idx),
+                Opcode::Strcat => self.handle_op_strcat(),
                 Opcode::Pop => self.handle_op_pop(),
                 Opcode::Halt => break,
             }
@@ -189,6 +190,20 @@ impl<'source, 'bytecode> VM<'source, 'bytecode> {
 
     fn handle_op_str(&mut self, s: &str) {
         self.stack.push(s.to_owned().into());
+    }
+
+    fn handle_op_strcat(&mut self) {
+        let b = self.stack.pop().unwrap();
+        let a = self.stack.pop().unwrap();
+
+        match (a, b) {
+            (Object::String(a), Object::String(b)) => {
+                self.stack.push(format!("{}{}", a, b).into());
+            }
+            _ => {
+                runtime_error!("Can only concatenate two strings.");
+            }
+        }
     }
 
     fn handle_op_print(&mut self) {

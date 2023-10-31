@@ -204,11 +204,12 @@ impl<'source> Parser<'source> {
 
     fn term(&mut self) -> Expression<'source> {
         let mut result = self.factor();
-        while self.is_next(&[TokenKind::Plus, TokenKind::Minus]) {
+        while self.is_next(&[TokenKind::Plus, TokenKind::Minus, TokenKind::PlusPlus]) {
             let kind = match self.previous {
                 Some(token) => match token.kind {
                     TokenKind::Plus => BinaryExpressionKind::Add,
                     TokenKind::Minus => BinaryExpressionKind::Sub,
+                    TokenKind::PlusPlus => BinaryExpressionKind::Strcat,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -269,6 +270,7 @@ impl<'source> Parser<'source> {
 
     fn primary(&mut self) -> Expression<'source> {
         if self.is_next(&[TokenKind::Number]) {
+            println!("{:?}", self.previous);
             let n = self.previous.unwrap().value.parse().unwrap();
             Expression::Literal(LiteralExpression {
                 value: Literal::Num(n),
@@ -286,6 +288,7 @@ impl<'source> Parser<'source> {
             Expression::Variable(VariableExpression { value: var })
         } else if self.is_next(&[TokenKind::String]) {
             let string = self.previous.unwrap().value;
+            println!("got string: {}", string);
             Expression::Literal(LiteralExpression {
                 value: Literal::String(string),
             })
@@ -403,6 +406,7 @@ pub enum BinaryExpressionKind {
     Greater,
     LessEqual,
     GreaterEqual,
+    Strcat,
 }
 
 #[allow(dead_code)]

@@ -134,3 +134,12 @@ fn _while() {
     );
     run_test!(path, expected);
 }
+
+#[test]
+fn strcat() {
+    let (path, expected) = (
+        "tests/cases/strcat.syn",
+        object_vec!["Hello, world!".to_string()],
+    );
+    run_test!(path, expected);
+}

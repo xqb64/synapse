@@ -253,6 +253,9 @@ impl<'source> Codegen<'source> for BinaryExpression<'source> {
             BinaryExpressionKind::GreaterEqual => {
                 compiler.emit_bytes(&[Opcode::Lt, Opcode::Not]);
             }
+            BinaryExpressionKind::Strcat => {
+                compiler.emit_bytes(&[Opcode::Strcat]);
+            }
         }
     }
 }
@@ -309,6 +312,7 @@ pub enum Opcode<'source> {
     Ret,
     Deepget(usize),
     Deepset(usize),
+    Strcat,
     Pop,
     Halt,
 }

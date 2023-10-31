@@ -24,6 +24,7 @@ pub enum TokenKind {
     GreaterEqual,
     BangEqual,
     DoubleEqual,
+    PlusPlus,
     String,
     Semicolon,
     LeftParen,
@@ -64,7 +65,7 @@ impl<'source> Iterator for Tokenizer<'source> {
 
         let r = Regex::new(
             format!(
-                "({})|({})|({})|({})|({})|({}|({}))",
+                "({})|({})|({})|({})|({})|({})|{}",
                 re_keyword,
                 re_literal,
                 re_identifier,
@@ -126,6 +127,7 @@ impl<'source> Iterator for Tokenizer<'source> {
                         "!=" => Token::new(TokenKind::BangEqual, "!="),
                         "<=" => Token::new(TokenKind::LessEqual, "<="),
                         ">=" => Token::new(TokenKind::GreaterEqual, ">="),
+                        "++" => Token::new(TokenKind::PlusPlus, "++"),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("number") {
