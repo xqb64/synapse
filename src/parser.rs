@@ -309,14 +309,8 @@ impl<'src> Parser<'src> {
             if let Token::String(string) = self.previous.unwrap() {
                 /* The dance below is due to logos not supporting capture groups.
                  * We need to strip the quotes from the string manually. */
-                let excess = r#"""#;
                 Expression::Literal(LiteralExpression {
-                    value: Literal::String(
-                        string
-                            .strip_prefix(excess)
-                            .and_then(|s| s.strip_suffix(excess))
-                            .unwrap(),
-                    ),
+                    value: Literal::String(string),
                 })
             } else {
                 unreachable!();
