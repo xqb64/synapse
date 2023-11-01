@@ -1,4 +1,4 @@
-use crate::tokenizer::{Token, TokenKind};
+use crate::tokenizer::Token;
 use std::collections::VecDeque;
 
 pub struct Parser<'src> {
@@ -26,7 +26,7 @@ impl<'src> Parser<'src> {
         statements
     }
 
-    fn is_next(&mut self, tokens: &[TokenKind]) -> bool {
+    fn is_next(&mut self, tokens: &[Token]) -> bool {
         for token in tokens {
             if self.check(*token) {
                 self.advance();
@@ -36,8 +36,8 @@ impl<'src> Parser<'src> {
         false
     }
 
-    fn check(&self, kind: TokenKind) -> bool {
-        self.current.unwrap().kind == kind
+    fn check(&self, kind: Token) -> bool {
+        std::mem::discriminant(self.current.as_ref().unwrap()) == std::mem::discriminant(&kind)
     }
 
     fn advance(&mut self) -> Option<Token<'src>> {
@@ -46,7 +46,7 @@ impl<'src> Parser<'src> {
         self.previous
     }
 
-    fn consume(&mut self, kind: TokenKind) -> Option<Token<'src>> {
+    fn consume(&mut self, kind: Token) -> Option<Token<'src>> {
         if self.check(kind) {
             return self.advance();
         }
@@ -54,17 +54,17 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_statement(&mut self) -> Statement<'src> {
-        if self.is_next(&[TokenKind::Print]) {
+        if self.is_next(&[Token::Print]) {
             self.parse_print_statement()
-        } else if self.is_next(&[TokenKind::Fn]) {
+        } else if self.is_next(&[Token::Fn]) {
             self.parse_fn_statement()
-        } else if self.is_next(&[TokenKind::Return]) {
+        } else if self.is_next(&[Token::Return]) {
             self.parse_return_statement()
-        } else if self.is_next(&[TokenKind::If]) {
+        } else if self.is_next(&[Token::If]) {
             self.parse_if_statement()
-        } else if self.is_next(&[TokenKind::While]) {
+        } else if self.is_next(&[Token::While]) {
             self.parse_while_statement()
-        } else if self.is_next(&[TokenKind::LeftBrace]) {
+        } else if self.is_next(&[Token::LeftBrace]) {
             self.parse_block_statement()
         } else {
             self.parse_expression_statement()
@@ -73,23 +73,23 @@ impl<'src> Parser<'src> {
 
     fn parse_print_statement(&mut self) -> Statement<'src> {
         let expression = self.parse_expression();
-        self.consume(TokenKind::Semicolon);
+        self.consume(Token::Semicolon);
         Statement::Print(PrintStatement { expression })
     }
 
     fn parse_fn_statement(&mut self) -> Statement<'src> {
-        let name = self.consume(TokenKind::Identifier).unwrap();
-        self.consume(TokenKind::LeftParen);
+        let name = self.consume(Token::Identifier("")).unwrap();
+        self.consume(Token::LeftParen);
         let mut arguments = vec![];
-        while !self.is_next(&[TokenKind::RightParen]) {
-            let arg = self.consume(TokenKind::Identifier).unwrap();
-            self.consume(TokenKind::Comma);
-            arguments.push(arg.value);
+        while !self.is_next(&[Token::RightParen]) {
+            let arg = self.consume(Token::Identifier("")).unwrap();
+            self.consume(Token::Comma);
+            arguments.push(arg);
         }
-        self.consume(TokenKind::LeftBrace);
+        self.consume(Token::LeftBrace);
         let body = self.parse_block_statement();
         Statement::Fn(FnStatement {
-            name: name.value,
+            name,
             arguments,
             body: body.into(),
         })
@@ -97,16 +97,16 @@ impl<'src> Parser<'src> {
 
     fn parse_return_statement(&mut self) -> Statement<'src> {
         let expression = self.parse_expression();
-        self.consume(TokenKind::Semicolon);
+        self.consume(Token::Semicolon);
         Statement::Return(ReturnStatement { expression })
     }
 
     fn parse_if_statement(&mut self) -> Statement<'src> {
-        self.consume(TokenKind::LeftParen);
+        self.consume(Token::LeftParen);
         let condition = self.parse_expression();
-        self.consume(TokenKind::RightParen);
+        self.consume(Token::RightParen);
         let if_branch = self.parse_statement();
-        let else_branch: Statement = if self.is_next(&[TokenKind::Else]) {
+        let else_branch: Statement = if self.is_next(&[Token::Else]) {
             self.parse_statement()
         } else {
             Statement::Dummy
@@ -119,9 +119,9 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_while_statement(&mut self) -> Statement<'src> {
-        self.consume(TokenKind::LeftParen);
+        self.consume(Token::LeftParen);
         let condition = self.parse_expression();
-        self.consume(TokenKind::RightParen);
+        self.consume(Token::RightParen);
         let body = self.parse_statement();
         Statement::While(WhileStatement {
             condition,
@@ -131,7 +131,7 @@ impl<'src> Parser<'src> {
 
     fn parse_block_statement(&mut self) -> Statement<'src> {
         let mut body = vec![];
-        while !self.is_next(&[TokenKind::RightBrace]) {
+        while !self.is_next(&[Token::RightBrace]) {
             body.push(self.parse_statement());
         }
         Statement::Block(BlockStatement { body })
@@ -139,7 +139,7 @@ impl<'src> Parser<'src> {
 
     fn parse_expression_statement(&mut self) -> Statement<'src> {
         let expr = self.parse_expression();
-        self.consume(TokenKind::Semicolon);
+        self.consume(Token::Semicolon);
         Statement::Expression(ExpressionStatement { expression: expr })
     }
 
@@ -149,7 +149,7 @@ impl<'src> Parser<'src> {
 
     fn assignment(&mut self) -> Expression<'src> {
         let mut result = self.equality();
-        while self.is_next(&[TokenKind::Equal]) {
+        while self.is_next(&[Token::Equal]) {
             result = Expression::Assign(AssignExpression {
                 lhs: result.into(),
                 rhs: self.equality().into(),
@@ -160,10 +160,10 @@ impl<'src> Parser<'src> {
 
     fn equality(&mut self) -> Expression<'src> {
         let mut result = self.relational();
-        while self.is_next(&[TokenKind::DoubleEqual, TokenKind::BangEqual]) {
-            let negation = match self.previous.unwrap().kind {
-                TokenKind::BangEqual => true,
-                TokenKind::DoubleEqual => false,
+        while self.is_next(&[Token::DoubleEqual, Token::BangEqual]) {
+            let negation = match self.previous.unwrap() {
+                Token::BangEqual => true,
+                Token::DoubleEqual => false,
                 _ => unreachable!(),
             };
             result = Expression::Binary(BinaryExpression {
@@ -178,17 +178,17 @@ impl<'src> Parser<'src> {
     fn relational(&mut self) -> Expression<'src> {
         let mut result = self.term();
         while self.is_next(&[
-            TokenKind::Less,
-            TokenKind::Greater,
-            TokenKind::LessEqual,
-            TokenKind::GreaterEqual,
+            Token::Less,
+            Token::Greater,
+            Token::LessEqual,
+            Token::GreaterEqual,
         ]) {
             let kind = match self.previous {
-                Some(token) => match token.kind {
-                    TokenKind::Less => BinaryExpressionKind::Less,
-                    TokenKind::Greater => BinaryExpressionKind::Greater,
-                    TokenKind::LessEqual => BinaryExpressionKind::LessEqual,
-                    TokenKind::GreaterEqual => BinaryExpressionKind::GreaterEqual,
+                Some(token) => match token {
+                    Token::Less => BinaryExpressionKind::Less,
+                    Token::Greater => BinaryExpressionKind::Greater,
+                    Token::LessEqual => BinaryExpressionKind::LessEqual,
+                    Token::GreaterEqual => BinaryExpressionKind::GreaterEqual,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -204,12 +204,12 @@ impl<'src> Parser<'src> {
 
     fn term(&mut self) -> Expression<'src> {
         let mut result = self.factor();
-        while self.is_next(&[TokenKind::Plus, TokenKind::Minus, TokenKind::PlusPlus]) {
+        while self.is_next(&[Token::Plus, Token::Minus, Token::PlusPlus]) {
             let kind = match self.previous {
-                Some(token) => match token.kind {
-                    TokenKind::Plus => BinaryExpressionKind::Add,
-                    TokenKind::Minus => BinaryExpressionKind::Sub,
-                    TokenKind::PlusPlus => BinaryExpressionKind::Strcat,
+                Some(token) => match token {
+                    Token::Plus => BinaryExpressionKind::Add,
+                    Token::Minus => BinaryExpressionKind::Sub,
+                    Token::PlusPlus => BinaryExpressionKind::Strcat,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -225,11 +225,11 @@ impl<'src> Parser<'src> {
 
     fn factor(&mut self) -> Expression<'src> {
         let mut result = self.unary();
-        while self.is_next(&[TokenKind::Star, TokenKind::Slash]) {
+        while self.is_next(&[Token::Star, Token::Slash]) {
             let kind = match self.previous {
-                Some(token) => match token.kind {
-                    TokenKind::Star => BinaryExpressionKind::Mul,
-                    TokenKind::Slash => BinaryExpressionKind::Div,
+                Some(token) => match token {
+                    Token::Star => BinaryExpressionKind::Mul,
+                    Token::Slash => BinaryExpressionKind::Div,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -244,8 +244,8 @@ impl<'src> Parser<'src> {
     }
 
     fn unary(&mut self) -> Expression<'src> {
-        if self.is_next(&[TokenKind::Minus, TokenKind::Bang]) {
-            let op = self.previous.unwrap().value;
+        if self.is_next(&[Token::Minus, Token::Bang]) {
+            let op = self.previous.unwrap();
             let expr = self.unary();
             return Expression::Unary(UnaryExpression {
                 expr: expr.into(),
@@ -257,17 +257,17 @@ impl<'src> Parser<'src> {
 
     fn call(&mut self) -> Expression<'src> {
         let mut expr = self.primary();
-        if self.is_next(&[TokenKind::LeftParen]) {
+        if self.is_next(&[Token::LeftParen]) {
             let mut arguments = vec![];
-            if !self.check(TokenKind::RightParen) {
+            if !self.check(Token::RightParen) {
                 loop {
                     arguments.push(self.parse_expression());
-                    if !self.is_next(&[TokenKind::Comma]) {
+                    if !self.is_next(&[Token::Comma]) {
                         break;
                     }
                 }
             }
-            self.consume(TokenKind::RightParen);
+            self.consume(Token::RightParen);
             let name = match expr {
                 Expression::Variable(v) => v.value,
                 _ => unimplemented!(),
@@ -281,27 +281,38 @@ impl<'src> Parser<'src> {
     }
 
     fn primary(&mut self) -> Expression<'src> {
-        if self.is_next(&[TokenKind::Number]) {
-            let n = self.previous.unwrap().value.parse().unwrap();
+        if self.is_next(&[Token::Number(0.0)]) {
+            if let Token::Number(n) = self.previous.unwrap() {
+                Expression::Literal(LiteralExpression {
+                    value: Literal::Num(n),
+                })
+            } else {
+                unreachable!();
+            }
+        } else if self.is_next(&[Token::True, Token::False, Token::Null]) {
+            let literal = match self.previous.unwrap() {
+                Token::True => "true",
+                Token::False => "false",
+                Token::Null => "null",
+                _ => unreachable!(),
+            };
             Expression::Literal(LiteralExpression {
-                value: Literal::Num(n),
+                value: literal.into(),
             })
-        } else if self.is_next(&[TokenKind::True, TokenKind::False, TokenKind::Null]) {
-            let literal: Literal = self
-                .previous
-                .unwrap()
-                .value
-                .parse()
-                .expect("Failed to parse a literal.");
-            Expression::Literal(LiteralExpression { value: literal })
-        } else if self.is_next(&[TokenKind::Identifier]) {
-            let var = self.previous.unwrap().value;
-            Expression::Variable(VariableExpression { value: var })
-        } else if self.is_next(&[TokenKind::String]) {
-            let string = self.previous.unwrap().value;
-            Expression::Literal(LiteralExpression {
-                value: Literal::String(string),
-            })
+        } else if self.is_next(&[Token::Identifier("")]) {
+            if let Token::Identifier(var) = self.previous.unwrap() {
+                Expression::Variable(VariableExpression { value: var })
+            } else {
+                unreachable!();
+            }
+        } else if self.is_next(&[Token::String("")]) {
+            if let Token::String(string) = self.previous.unwrap() {
+                Expression::Literal(LiteralExpression {
+                    value: Literal::String(string),
+                })
+            } else {
+                unreachable!();
+            }
         } else {
             todo!();
         }
@@ -333,8 +344,8 @@ pub struct PrintStatement<'src> {
 
 #[derive(Debug)]
 pub struct FnStatement<'src> {
-    pub name: &'src str,
-    pub arguments: Vec<&'src str>,
+    pub name: Token<'src>,
+    pub arguments: Vec<Token<'src>>,
     pub body: Box<Statement<'src>>,
 }
 
@@ -408,7 +419,7 @@ pub struct AssignExpression<'src> {
 #[derive(Debug)]
 pub struct UnaryExpression<'src> {
     pub expr: Box<Expression<'src>>,
-    pub op: &'src str,
+    pub op: Token<'src>,
 }
 
 #[derive(Debug)]
@@ -433,14 +444,13 @@ pub enum Literal<'src> {
     Null,
 }
 
-impl<'src> std::str::FromStr for Literal<'src> {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl<'src> From<&'src str> for Literal<'src> {
+    fn from(s: &'src str) -> Self {
         match s {
-            "true" => Ok(Literal::Bool(true)),
-            "false" => Ok(Literal::Bool(false)),
-            "null" => Ok(Literal::Null),
-            _ => Err(format!("{} is not a valid object literal", s)),
+            "true" => Literal::Bool(true),
+            "false" => Literal::Bool(false),
+            "null" => Literal::Null,
+            _ => unreachable!(),
         }
     }
 }
