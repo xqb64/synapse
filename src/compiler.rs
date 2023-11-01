@@ -12,8 +12,7 @@ pub struct Compiler<'src> {
     bytecode: Vec<Opcode<'src>>,
     functions: HashMap<&'src str, usize>,
     locals: Vec<&'src str>,
-    depth: usize,
-    pops: [usize; CAPACITY_MIN],
+    pops: Vec<usize>,
 }
 
 impl Default for Compiler<'_> {
@@ -28,8 +27,7 @@ impl<'src> Compiler<'src> {
             bytecode: Vec::with_capacity(CAPACITY_MIN),
             functions: HashMap::with_capacity(CAPACITY_MIN),
             locals: Vec::with_capacity(CAPACITY_MIN),
-            depth: 0,
-            pops: [0; CAPACITY_MIN],
+            pops: Vec::with_capacity(CAPACITY_MIN),
         }
     }
 
@@ -49,8 +47,8 @@ impl<'src> Compiler<'src> {
     }
 
     fn emit_stack_cleanup(&mut self) {
-        let popcount = self.pops[self.depth];
-        for _ in 0..popcount {
+        let popcount = self.pops.last().unwrap();
+        for _ in 0..*popcount {
             self.bytecode.push(Opcode::Pop);
         }
     }
@@ -100,7 +98,7 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
             compiler.locals.push(argument);
         }
 
-        compiler.pops[1] = compiler.locals.len();
+        compiler.pops.push(compiler.locals.len());
 
         if let Statement::Block(block) = &*self.body {
             block.codegen(compiler);
@@ -170,12 +168,12 @@ impl<'src> Codegen<'src> for ReturnStatement<'src> {
 
 impl<'src> Codegen<'src> for BlockStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
-        compiler.depth += 1;
+        compiler.pops.push(0);
         for statement in &self.body {
             statement.codegen(compiler);
         }
         compiler.emit_stack_cleanup();
-        compiler.depth -= 1;
+        compiler.pops.pop();
     }
 }
 
@@ -299,7 +297,9 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
             compiler.emit_opcodes(&[Opcode::Deepset(idx)]);
         } else {
             compiler.locals.push(variable_name);
-            compiler.pops[compiler.depth] += 1;
+            if let Some(last) = compiler.pops.last_mut() {
+                *last += 1;
+            }
         }
     }
 }
