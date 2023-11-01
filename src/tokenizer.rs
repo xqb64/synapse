@@ -109,8 +109,12 @@ pub enum Token<'src> {
 }
 
 macro_rules! tokenizer_error {
-    ($msg:expr) => {{
-        eprintln!("tokenizer error: {}", $msg);
+    ($msg:expr, $($arg:expr),*) => {{
+        eprint!("tokenizer error: {} ", $msg);
+        $(
+            eprint!("{}", $arg);
+        )*
+        eprint!("\n");
         std::process::exit(1);
     }};
 }
@@ -134,7 +138,7 @@ impl<'src> Iterator for Tokenizer<'src> {
             Some(Ok(r)) => Some(r),
             Some(Err(_)) => {
                 let token = self.lexer.slice();
-                tokenizer_error!(format!("got unexpected token: {}", token));
+                tokenizer_error!("got unexpected token:", token);
             }
             None => None,
         }
