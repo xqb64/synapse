@@ -297,7 +297,7 @@ impl<'src> Parser<'src> {
                 _ => unreachable!(),
             };
             Expression::Literal(LiteralExpression {
-                value: literal.parse().unwrap(),
+                value: literal.into(),
             })
         } else if self.is_next(&[Token::Identifier("")]) {
             if let Token::Identifier(var) = self.previous.unwrap() {
@@ -446,14 +446,13 @@ pub enum Literal<'src> {
     Null,
 }
 
-impl<'src> std::str::FromStr for Literal<'src> {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl<'src> From<&'src str> for Literal<'src> {
+    fn from(s: &'src str) -> Self {
         match s {
-            "true" => Ok(Literal::Bool(true)),
-            "false" => Ok(Literal::Bool(false)),
-            "null" => Ok(Literal::Null),
-            _ => Err(format!("{} is not a valid object literal", s)),
+            "true" => Literal::Bool(true),
+            "false" => Literal::Bool(false),
+            "null" => Literal::Null,
+            _ => unreachable!(),
         }
     }
 }
