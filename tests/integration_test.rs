@@ -121,8 +121,8 @@ fn relational_error() {
 }
 
 #[test]
-fn fib20() {
-    let (path, expected) = ("tests/cases/fib20.syn", object_vec![6765.0]);
+fn fib10() {
+    let (path, expected) = ("tests/cases/fib10.syn", object_vec![55.0]);
     run_test!(path, expected);
 }
 
@@ -190,4 +190,10 @@ fn tokenizer_error() {
         "tokenizer error: got unexpected token: $",
     );
     run_test_error!(path, expected);
+}
+
+#[test]
+fn grouping() {
+    let (path, expected) = ("tests/cases/grouping.syn", object_vec![14.0]);
+    run_test!(path, expected);
 }

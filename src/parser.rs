@@ -280,6 +280,12 @@ impl<'src> Parser<'src> {
         expr
     }
 
+    fn grouping(&mut self) -> Expression<'src> {
+        let expr = self.parse_expression();
+        self.consume(Token::RightParen);
+        expr
+    }
+
     fn primary(&mut self) -> Expression<'src> {
         if self.is_next(&[Token::Number(0.0)]) {
             if let Token::Number(n) = self.previous.unwrap() {
@@ -289,6 +295,8 @@ impl<'src> Parser<'src> {
             } else {
                 unreachable!();
             }
+        } else if self.is_next(&[Token::LeftParen]) {
+            self.grouping()
         } else if self.is_next(&[Token::True, Token::False, Token::Null]) {
             let literal = match self.previous.unwrap() {
                 Token::True => "true",
