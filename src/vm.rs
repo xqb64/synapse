@@ -126,14 +126,13 @@ macro_rules! binop {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        let (fp, idx) = match $self.frame_ptrs.last() {
+        match $self.frame_ptrs.last() {
             Some(&internal_obj) => {
                 let InternalObject::BytecodePtr(_, location) = internal_obj;
-                (location, $index)
+                location + $index
             }
-            None => (0, $index),
-        };
-        fp + idx
+            None => 0 + $index,
+        }
     }};
 }
 
