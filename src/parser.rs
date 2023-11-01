@@ -113,8 +113,8 @@ impl<'src> Parser<'src> {
         };
         Statement::If(IfStatement {
             condition,
-            if_branch: Box::new(if_branch),
-            else_branch: Box::new(else_branch),
+            if_branch: if_branch.into(),
+            else_branch: else_branch.into(),
         })
     }
 
@@ -168,8 +168,8 @@ impl<'src> Parser<'src> {
             };
             result = Expression::Binary(BinaryExpression {
                 kind: BinaryExpressionKind::Equality(negation),
-                lhs: Box::new(result),
-                rhs: Box::new(self.relational()),
+                lhs: result.into(),
+                rhs: self.relational().into(),
             });
         }
         result
@@ -195,8 +195,8 @@ impl<'src> Parser<'src> {
             };
             result = Expression::Binary(BinaryExpression {
                 kind,
-                lhs: Box::new(result),
-                rhs: Box::new(self.term()),
+                lhs: result.into(),
+                rhs: self.term().into(),
             });
         }
         result
@@ -216,8 +216,8 @@ impl<'src> Parser<'src> {
             };
             result = Expression::Binary(BinaryExpression {
                 kind,
-                lhs: Box::new(result),
-                rhs: Box::new(self.factor()),
+                lhs: result.into(),
+                rhs: self.factor().into(),
             });
         }
         result
@@ -236,8 +236,8 @@ impl<'src> Parser<'src> {
             };
             result = Expression::Binary(BinaryExpression {
                 kind,
-                lhs: Box::new(result),
-                rhs: Box::new(self.unary()),
+                lhs: result.into(),
+                rhs: self.unary().into(),
             });
         }
         result
