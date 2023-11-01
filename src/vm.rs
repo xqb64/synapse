@@ -76,6 +76,17 @@ impl std::ops::Not for Object {
     }
 }
 
+impl std::ops::Neg for Object {
+    type Output = Object;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Object::Number(b) => (-b).into(),
+            _ => runtime_error!("You can only - numbers."),
+        }
+    }
+}
+
 impl std::cmp::PartialOrd for Object {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
@@ -161,6 +172,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                 Opcode::Div => self.handle_op_div(),
                 Opcode::False => self.handle_op_false(),
                 Opcode::Not => self.handle_op_not(),
+                Opcode::Neg => self.handle_op_neg(),
                 Opcode::Null => self.handle_op_null(),
                 Opcode::Eq => self.handle_op_eq(),
                 Opcode::Lt => self.handle_op_lt(),
@@ -239,6 +251,11 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     fn handle_op_not(&mut self) {
         let obj = self.stack.pop().unwrap();
         self.stack.push(!obj);
+    }
+
+    fn handle_op_neg(&mut self) {
+        let obj = self.stack.pop().unwrap();
+        self.stack.push(-obj);
     }
 
     fn handle_op_null(&mut self) {

@@ -224,7 +224,7 @@ impl<'src> Parser<'src> {
     }
 
     fn factor(&mut self) -> Expression<'src> {
-        let mut result = self.call();
+        let mut result = self.unary();
         while self.is_next(&[TokenKind::Star, TokenKind::Slash]) {
             let kind = match self.previous {
                 Some(token) => match token.kind {
@@ -237,10 +237,22 @@ impl<'src> Parser<'src> {
             result = Expression::Binary(BinaryExpression {
                 kind,
                 lhs: Box::new(result),
-                rhs: Box::new(self.call()),
+                rhs: Box::new(self.unary()),
             });
         }
         result
+    }
+
+    fn unary(&mut self) -> Expression<'src> {
+        if self.is_next(&[TokenKind::Minus, TokenKind::Bang]) {
+            let op = self.previous.unwrap().value;
+            let expr = self.unary();
+            return Expression::Unary(UnaryExpression {
+                expr: expr.into(),
+                op,
+            });
+        }
+        self.call()
     }
 
     fn call(&mut self) -> Expression<'src> {
@@ -361,6 +373,7 @@ pub enum Expression<'src> {
     Binary(BinaryExpression<'src>),
     Call(CallExpression<'src>),
     Assign(AssignExpression<'src>),
+    Unary(UnaryExpression<'src>),
 }
 
 #[derive(Debug)]
@@ -390,6 +403,12 @@ pub struct CallExpression<'src> {
 pub struct AssignExpression<'src> {
     pub lhs: Box<Expression<'src>>,
     pub rhs: Box<Expression<'src>>,
+}
+
+#[derive(Debug)]
+pub struct UnaryExpression<'src> {
+    pub expr: Box<Expression<'src>>,
+    pub op: &'src str,
 }
 
 #[derive(Debug)]

@@ -1,0 +1,6 @@
+fn main() {
+    x = "Hello, world!";
+    print !x;
+}
+
+main();

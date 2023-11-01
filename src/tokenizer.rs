@@ -18,6 +18,7 @@ pub enum TokenKind {
     Star,
     Slash,
     Equal,
+    Bang,
     Less,
     Greater,
     LessEqual,
@@ -58,7 +59,7 @@ impl<'src> Iterator for Tokenizer<'src> {
         let re_keyword = r"?P<keyword>print|fn|return|if|else|while";
         let re_literal = r"?P<literal>true|false|null";
         let re_identifier = r"?P<identifier>[a-zA-Z_][a-zA-Z0-9_]*";
-        let re_individual = r"?P<individual>[-+*/<>;(){},=]";
+        let re_individual = r"?P<individual>[-+*/<>;(){},=!]";
         let re_double = r"?P<double>==|!=|<=|>=|\+\+";
         let re_number = r"?P<number>[-+]?\d+(\.\d+)?";
         let re_string = r#""(?P<string>[^\n"]*)""#;
@@ -118,6 +119,7 @@ impl<'src> Iterator for Tokenizer<'src> {
                         "}" => Token::new(TokenKind::RightBrace, "}"),
                         "," => Token::new(TokenKind::Comma, ","),
                         "=" => Token::new(TokenKind::Equal, "="),
+                        "!" => Token::new(TokenKind::Bang, "!"),
                         _ => unreachable!(),
                     }
                 } else if let Some(m) = captures.name("double") {
