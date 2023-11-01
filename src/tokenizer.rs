@@ -98,7 +98,7 @@ pub enum Token<'src> {
      *
      * https://github.com/maciejhirsz/logos/issues/327
      */
-    #[regex(r#""[^\n"]*""#, |lex| { let s = lex.slice(); s[1..s.len() - 1].as_ref() })]
+    #[regex(r#""[^\n"]*""#, |lex| { let s = lex.slice(); &s[1..s.len() - 1] })]
     String(&'src str),
 
     #[regex("[a-zA-Z_]+")]
