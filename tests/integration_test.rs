@@ -187,7 +187,7 @@ fn not_error() {
 fn tokenizer_error() {
     let (path, expected) = (
         "tests/cases/tokenizer_error.syn",
-        "tokenizer error: got unexpected token",
+        "tokenizer error: got unexpected token: $",
     );
     run_test_error!(path, expected);
 }

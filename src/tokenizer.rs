@@ -98,7 +98,7 @@ pub enum Token<'src> {
      *
      * https://github.com/maciejhirsz/logos/issues/327
      */
-    #[regex(r#""[^\n"]*""#, |lex| lex.slice().strip_prefix('"').and_then(|s| s.strip_suffix('"')))]
+    #[regex(r#""[^\n"]*""#, |lex| { let s = lex.slice(); s[1..s.len() - 1].as_ref() })]
     String(&'src str),
 
     #[regex("[a-zA-Z_]+")]
@@ -133,12 +133,8 @@ impl<'src> Iterator for Tokenizer<'src> {
         match self.lexer.next() {
             Some(Ok(r)) => Some(r),
             Some(Err(_)) => {
-                /* Figure out if we could report what token
-                 * was unexpected.
-                 *
-                 * https://github.com/maciejhirsz/logos/issues/346
-                 * */
-                tokenizer_error!("got unexpected token");
+                let token = self.lexer.slice();
+                tokenizer_error!(format!("got unexpected token: {}", token));
             }
             None => None,
         }
