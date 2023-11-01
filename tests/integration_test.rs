@@ -143,3 +143,27 @@ fn strcat() {
     );
     run_test!(path, expected);
 }
+
+#[test]
+fn neg() {
+    let (path, expected) = ("tests/cases/neg.syn", object_vec![-5.0]);
+    run_test!(path, expected);
+}
+
+#[test]
+fn neg_error() {
+    let (path, expected) = ("tests/cases/neg_error.syn", "You can only - numbers.");
+    run_test_error!(path, expected);
+}
+
+#[test]
+fn not() {
+    let (path, expected) = ("tests/cases/not.syn", object_vec![true]);
+    run_test!(path, expected);
+}
+
+#[test]
+fn not_error() {
+    let (path, expected) = ("tests/cases/not_error.syn", "You can only ! booleans.");
+    run_test_error!(path, expected);
+}

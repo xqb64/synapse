@@ -1,7 +1,8 @@
 use crate::parser::{
     AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
     Expression, ExpressionStatement, FnStatement, IfStatement, Literal, LiteralExpression,
-    PrintStatement, ReturnStatement, Statement, VariableExpression, WhileStatement,
+    PrintStatement, ReturnStatement, Statement, UnaryExpression, VariableExpression,
+    WhileStatement,
 };
 use std::collections::HashMap;
 
@@ -186,6 +187,7 @@ impl<'src> Codegen<'src> for Expression<'src> {
             Expression::Binary(binexp) => binexp.codegen(compiler),
             Expression::Call(call) => call.codegen(compiler),
             Expression::Assign(assignment) => assignment.codegen(compiler),
+            Expression::Unary(unary) => unary.codegen(compiler),
         }
     }
 }
@@ -302,6 +304,22 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
     }
 }
 
+impl<'src> Codegen<'src> for UnaryExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
+        match self.op {
+            "-" => {
+                self.expr.codegen(compiler);
+                compiler.emit_opcodes(&[Opcode::Neg]);
+            }
+            "!" => {
+                self.expr.codegen(compiler);
+                compiler.emit_opcodes(&[Opcode::Not]);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Opcode<'src> {
     Print,
@@ -312,6 +330,7 @@ pub enum Opcode<'src> {
     Div,
     False,
     Not,
+    Neg,
     Null,
     Eq,
     Lt,

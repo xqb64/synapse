@@ -1,0 +1,6 @@
+fn main() {
+    x = false;
+    print -x;
+}
+
+main();
