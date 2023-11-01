@@ -307,8 +307,6 @@ impl<'src> Parser<'src> {
             }
         } else if self.is_next(&[Token::String("")]) {
             if let Token::String(string) = self.previous.unwrap() {
-                /* The dance below is due to logos not supporting capture groups.
-                 * We need to strip the quotes from the string manually. */
                 Expression::Literal(LiteralExpression {
                     value: Literal::String(string),
                 })
