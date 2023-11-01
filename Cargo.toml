@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 assert_cmd = "2.0.12"
+logos = "0.13.0"
 regex = "1.10.2"
 
 [dev-dependencies]
@@ -19,6 +20,3 @@ harness = false
 [profile.release]
 lto = "fat"
 panic = "abort"
-
-[build]
-rustflags = ["-C", "target-cpu=native"]

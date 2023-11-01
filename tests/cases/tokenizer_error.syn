@@ -1,0 +1,6 @@
+fn main() {
+    x = $;
+    print x;
+}
+
+main();

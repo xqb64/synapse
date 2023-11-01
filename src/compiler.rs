@@ -4,6 +4,7 @@ use crate::parser::{
     PrintStatement, ReturnStatement, Statement, UnaryExpression, VariableExpression,
     WhileStatement,
 };
+use crate::tokenizer::Token;
 use std::collections::HashMap;
 
 const CAPACITY_MIN: usize = 1024;
@@ -92,10 +93,18 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
 
-        compiler.functions.insert(self.name, jmp_idx);
+        if let Token::Identifier(name) = self.name {
+            compiler.functions.insert(name, jmp_idx);
+        } else {
+            unreachable!();
+        }
 
         for argument in &self.arguments {
-            compiler.locals.push(argument);
+            if let Token::Identifier(ident) = argument {
+                compiler.locals.push(ident);
+            } else {
+                unreachable!();
+            }
         }
 
         compiler.pops.push(compiler.locals.len());
@@ -307,11 +316,11 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
 impl<'src> Codegen<'src> for UnaryExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         match self.op {
-            "-" => {
+            Token::Minus => {
                 self.expr.codegen(compiler);
                 compiler.emit_opcodes(&[Opcode::Neg]);
             }
-            "!" => {
+            Token::Bang => {
                 self.expr.codegen(compiler);
                 compiler.emit_opcodes(&[Opcode::Not]);
             }
