@@ -94,6 +94,10 @@ pub enum Token<'src> {
     #[token(",")]
     Comma,
 
+    /* It is not possible to use capture groups.
+     *
+     * https://github.com/maciejhirsz/logos/issues/327
+     */
     #[regex(r#""[^\n"]*""#, |lex| lex.slice())]
     String(&'src str),
 
@@ -128,8 +132,13 @@ impl<'src> Iterator for Tokenizer<'src> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.lexer.next() {
             Some(Ok(r)) => Some(r),
-            Some(Err(e)) => {
-                tokenizer_error!(format!("Got unexpected token: {:?}", e));
+            Some(Err(_)) => {
+                /* Figure out if we could report what token
+                 * was unexpected.
+                 *
+                 * https://github.com/maciejhirsz/logos/issues/346
+                 * */
+                tokenizer_error!("got unexpected token");
             }
             None => None,
         }

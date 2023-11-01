@@ -160,6 +160,12 @@ fn neg() {
 }
 
 #[test]
+fn minus_number() {
+    let (path, expected) = ("tests/cases/minus_number.syn", object_vec![3.14]);
+    run_test!(path, expected);
+}
+
+#[test]
 fn neg_error() {
     let (path, expected) = ("tests/cases/neg_error.syn", "You can only - numbers.");
     run_test_error!(path, expected);
@@ -174,5 +180,14 @@ fn not() {
 #[test]
 fn not_error() {
     let (path, expected) = ("tests/cases/not_error.syn", "You can only ! booleans.");
+    run_test_error!(path, expected);
+}
+
+#[test]
+fn tokenizer_error() {
+    let (path, expected) = (
+        "tests/cases/tokenizer_error.syn",
+        "tokenizer error: got unexpected token",
+    );
     run_test_error!(path, expected);
 }
