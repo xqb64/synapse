@@ -220,3 +220,66 @@ fn strcat_error() {
     );
     run_test_error!(vm, path, expected);
 }
+
+#[test]
+fn parser_error_expected_decl() {
+    let (path, expected) = (
+        "tests/cases/parser_error_expected_decl.syn",
+        "expected a declaration (like 'fn' or 'struct')",
+    );
+    run_test_error!(parser, path, expected);
+}
+
+#[test]
+fn parser_error_expected_identifier_when_instantiating_struct() {
+    let (path, expected) = (
+        "tests/cases/parser_error_expected_identifier_when_instantiating_struct.syn",
+        "expected: number, string, (, true, false, null, identifier",
+    );
+    run_test_error!(parser, path, expected);
+}
+
+#[test]
+fn parser_error_expected_identifier_after_struct_keyword() {
+    let (path, expected) = (
+        "tests/cases/parser_error_expected_identifier_after_struct_keyword.syn",
+        "expected identifier after 'struct' keyword, got: Number(1.0)",
+    );
+    run_test_error!(parser, path, expected);
+}
+
+#[test]
+fn parser_error_wrong_struct_decl() {
+    let (path, expected) = (
+        "tests/cases/parser_error_wrong_struct_decl.syn",
+        "structs should be declared as: `struct s { x, y, z, }`",
+    );
+    run_test_error!(parser, path, expected);
+}
+
+#[test]
+fn compiler_error_struct_not_defined() {
+    let (path, expected) = (
+        "tests/cases/compiler_error_struct_not_defined.syn",
+        "struct 'egg' is not defined",
+    );
+    run_test_error!(compiler, path, expected);
+}
+
+#[test]
+fn compiler_error_wrong_initializer_count() {
+    let (path, expected) = (
+        "tests/cases/compiler_error_wrong_initializer_count.syn",
+        "struct 'spam' has 3 members",
+    );
+    run_test_error!(compiler, path, expected);
+}
+
+#[test]
+fn compiler_error_no_main() {
+    let (path, expected) = (
+        "tests/cases/compiler_error_no_main.syn",
+        "main fn was not defined",
+    );
+    run_test_error!(compiler, path, expected);
+}

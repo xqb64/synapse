@@ -1,0 +1,5 @@
+fn main() {
+    x = false;
+    y = "Hello, world!"
+    print x ++ y;
+}

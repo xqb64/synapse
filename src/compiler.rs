@@ -45,7 +45,7 @@ impl<'src> Compiler<'src> {
             Some(&addr) => {
                 self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(addr), Opcode::Pop]);
             }
-            None => bail_out!(compiler, "The main fn was not defined."),
+            None => bail_out!(compiler, "main fn was not defined"),
         }
 
         self.bytecode.push(Opcode::Halt);
@@ -362,7 +362,7 @@ impl<'src> Codegen<'src> for StructExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         if let Some(s) = compiler.structs.get(self.name) {
             if s.len() != self.initializers.len() {
-                bail_out!(compiler, "struct '{}' has {} members.", self.name, s.len());
+                bail_out!(compiler, "struct '{}' has {} members", self.name, s.len());
             }
 
             compiler.emit_opcodes(&[Opcode::Struct(self.name)]);

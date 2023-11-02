@@ -1,4 +1,5 @@
-use crate::{bail_out, tokenizer::Token};
+use crate::bail_out;
+use crate::tokenizer::Token;
 use std::collections::VecDeque;
 
 pub struct Parser<'src> {
@@ -59,7 +60,7 @@ impl<'src> Parser<'src> {
         } else if self.is_next(&[Token::Struct]) {
             self.parse_struct_statement()
         } else {
-            bail_out!(parser, "Expected a declaration (like 'fn' or 'struct')");
+            bail_out!(parser, "expected a declaration (like 'fn' or 'struct')");
         }
     }
 
@@ -140,7 +141,11 @@ impl<'src> Parser<'src> {
     fn parse_struct_statement(&mut self) -> Statement<'src> {
         let name = match self.consume(Token::Identifier("")) {
             Some(Token::Identifier(ident)) => ident,
-            _ => bail_out!(parser, "Expected identifier after 'struct' keyword."),
+            _ => bail_out!(
+                parser,
+                "expected identifier after 'struct' keyword, got: {}",
+                self.current.unwrap()
+            ),
         };
         self.consume(Token::LeftBrace);
         let mut members = vec![];
@@ -155,7 +160,7 @@ impl<'src> Parser<'src> {
             Some(Token::Identifier(ident)) => ident,
             _ => bail_out!(
                 parser,
-                "Structs should be declared as: struct s { x, y, z, }."
+                "structs should be declared as: `struct s { x, y, z, }`"
             ),
         };
         self.consume(Token::Comma);
@@ -342,7 +347,10 @@ impl<'src> Parser<'src> {
                 self.parse_variable()
             }
         } else {
-            todo!();
+            bail_out!(
+                parser,
+                "expected: number, string, (, true, false, null, identifier"
+            );
         }
     }
 
@@ -363,7 +371,7 @@ impl<'src> Parser<'src> {
     fn parse_struct_expression(&mut self) -> Expression<'src> {
         let name = match self.previous.unwrap() {
             Token::Identifier(ident) => ident,
-            _ => bail_out!(parser, "Expected identifier."),
+            _ => unreachable!(),
         };
 
         self.consume(Token::LeftBrace);
@@ -402,13 +410,7 @@ impl<'src> Parser<'src> {
             Token::True => Literal::Bool(true),
             Token::False => Literal::Bool(false),
             Token::Null => Literal::Null,
-            Token::Number(n) => Literal::Num(n),
-            Token::String(s) => Literal::String(s),
-            _ => bail_out!(
-                parser,
-                "got unexpected token while trying to parse a literal: {}",
-                self.previous.unwrap()
-            ),
+            _ => unreachable!(),
         };
         Expression::Literal(LiteralExpression { value: literal })
     }

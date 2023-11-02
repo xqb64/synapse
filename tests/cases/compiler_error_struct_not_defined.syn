@@ -1,0 +1,10 @@
+struct spam {
+    x,
+    y,
+    z,
+}
+
+fn main() {
+    x = egg { x: 0, y: 0, z: 0 }
+    print egg.x;
+}
