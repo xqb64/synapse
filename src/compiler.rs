@@ -13,7 +13,7 @@ const CAPACITY_MIN: usize = 1024;
 
 pub struct Compiler<'src> {
     bytecode: Vec<Opcode<'src>>,
-    functions: HashMap<&'src str, usize>,
+    functions: HashMap<&'src str, Function<'src>>,
     locals: Vec<&'src str>,
     structs: HashMap<&'src str, Vec<&'src str>>,
     pops: Vec<usize>,
@@ -42,8 +42,8 @@ impl<'src> Compiler<'src> {
         }
 
         match self.functions.get("main") {
-            Some(&addr) => {
-                self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(addr), Opcode::Pop]);
+            Some(f) => {
+                self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(f.location), Opcode::Pop]);
             }
             None => bail_out!(compiler, "main fn was not defined"),
         }
@@ -106,10 +106,30 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
 
-        if let Token::Identifier(name) = self.name {
-            compiler.functions.insert(name, jmp_idx);
-        } else {
-            unreachable!();
+        let name = match self.name {
+            Token::Identifier(ident) => ident,
+            _ => unreachable!(),
+        };
+
+        let arguments: Vec<&'src str> = self
+            .arguments
+            .iter()
+            .map(|&token| {
+                if let Token::Identifier(ident) = token {
+                    ident
+                } else {
+                    unreachable!();
+                }
+            })
+            .collect();
+
+        {
+            let f = Function {
+                name,
+                location: jmp_idx,
+                paramcount: arguments.len(),
+            };
+            compiler.functions.insert(name, f);
         }
 
         for argument in &self.arguments {
@@ -304,13 +324,30 @@ impl<'src> Codegen<'src> for BinaryExpression<'src> {
 
 impl<'src> Codegen<'src> for CallExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
+        let f = compiler.functions.get(&self.variable);
+
+        if f.is_none() {
+            bail_out!(compiler, "function '{}' is not defined", self.variable);
+        }
+
+        let f = f.unwrap();
+
+        if f.paramcount != self.arguments.len() {
+            bail_out!(
+                compiler,
+                "function '{}' takes {} arguments",
+                f.name,
+                f.paramcount
+            );
+        }
+
+        let addr = f.location;
+
         for argument in &self.arguments {
             argument.codegen(compiler);
         }
 
-        let jmp_addr = compiler.functions.get(&self.variable).unwrap();
-
-        compiler.emit_opcodes(&[Opcode::Call(self.arguments.len()), Opcode::Jmp(*jmp_addr)]);
+        compiler.emit_opcodes(&[Opcode::Call(self.arguments.len()), Opcode::Jmp(addr)]);
     }
 }
 
@@ -419,4 +456,11 @@ pub enum Opcode<'src> {
 
 trait Codegen<'src> {
     fn codegen(&self, _compiler: &mut Compiler<'src>) {}
+}
+
+#[derive(Debug, Clone)]
+struct Function<'src> {
+    name: &'src str,
+    paramcount: usize,
+    location: usize,
 }

@@ -1,0 +1,7 @@
+fn g(x, y, z) {
+    print x + y + z;
+}
+
+fn main() {
+    f(1, 2, 3);
+}

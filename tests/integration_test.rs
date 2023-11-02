@@ -283,3 +283,21 @@ fn compiler_error_no_main() {
     );
     run_test_error!(compiler, path, expected);
 }
+
+#[test]
+fn compiler_error_wrong_params() {
+    let (path, expected) = (
+        "tests/cases/compiler_error_wrong_params.syn",
+        "function 'f' takes 3 arguments",
+    );
+    run_test_error!(compiler, path, expected);
+}
+
+#[test]
+fn compiler_error_fn_not_defined() {
+    let (path, expected) = (
+        "tests/cases/compiler_error_fn_not_defined.syn",
+        "function 'f' is not defined",
+    );
+    run_test_error!(compiler, path, expected);
+}
