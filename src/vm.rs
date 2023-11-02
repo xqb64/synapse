@@ -1,11 +1,12 @@
 use crate::compiler::Opcode;
+use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object<'src> {
     Number(f64),
     Bool(bool),
-    String(Rc<String>),
+    String(Rc<Cow<'src, str>>),
     Struct(Rc<RefCell<StructObject<'src>>>),
     Null,
 }
@@ -121,13 +122,13 @@ impl<'src> From<f64> for Object<'src> {
 
 impl<'src> From<String> for Object<'src> {
     fn from(value: String) -> Self {
-        Self::String(value.into())
+        Self::String(Rc::new(Cow::Owned(value)))
     }
 }
 
 impl<'src> From<&'src str> for Object<'src> {
     fn from(value: &'src str) -> Self {
-        Self::String(value.to_owned().into())
+        Self::String(Rc::new(Cow::Borrowed(value)))
     }
 }
 
@@ -219,8 +220,8 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         self.stack.push(n.into());
     }
 
-    fn handle_op_str(&mut self, s: &str) {
-        self.stack.push(s.to_owned().into());
+    fn handle_op_str(&mut self, s: &'src str) {
+        self.stack.push(s.into());
     }
 
     fn handle_op_strcat(&mut self) {
@@ -229,7 +230,8 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
 
         match (a, b) {
             (Object::String(a), Object::String(b)) => {
-                self.stack.push(format!("{}{}", a, b).into());
+                self.stack
+                    .push(format!("{}{}", a.to_owned(), b.to_owned()).into());
             }
             _ => {
                 runtime_error!("Can only concatenate two strings.");
