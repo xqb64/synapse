@@ -1,1 +1,3 @@
-print 1 < null;
+fn main() {
+    print 1 < null;
+}

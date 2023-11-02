@@ -74,7 +74,7 @@ impl<'src> Parser<'src> {
         } else if self.is_next(&[Token::Struct]) {
             self.parse_struct_statement()
         } else {
-            self.parse_statement()
+            parser_error!("Expected a declaration (like 'fn' or 'struct')");
         }
     }
 

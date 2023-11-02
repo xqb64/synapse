@@ -19,6 +19,10 @@ macro_rules! compiler_error {
         eprint!("\n");
         std::process::exit(1);
     }};
+    ($msg:expr) => {{
+        eprintln!("{}", $msg);
+        std::process::exit(1);
+    }}
 }
 
 pub struct Compiler<'src> {
@@ -50,6 +54,14 @@ impl<'src> Compiler<'src> {
         for statement in ast {
             statement.codegen(self);
         }
+
+        match self.functions.get("main") {
+            Some(&addr) => {
+                self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(addr), Opcode::Pop]);
+            }
+            None => compiler_error!("You need to define the main fn."),
+        }
+
         self.bytecode.push(Opcode::Halt);
         self.bytecode.as_slice()
     }
