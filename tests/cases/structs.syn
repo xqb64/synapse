@@ -1,0 +1,14 @@
+struct Spam {
+    x,
+    y,
+    z,
+}
+
+fn main() {
+    egg = false;
+    s = Spam { x: 4, y: "Hello, world!", z: egg };
+    bacon = Spam { x: 0, y: 1, z: s }
+    print bacon.z.y;
+}
+
+main();

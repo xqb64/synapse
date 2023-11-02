@@ -1,7 +1,8 @@
 use crate::parser::{
     AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
-    Expression, ExpressionStatement, FnStatement, IfStatement, Literal, LiteralExpression,
-    PrintStatement, ReturnStatement, Statement, UnaryExpression, VariableExpression,
+    Expression, ExpressionStatement, FnStatement, GetExpression, IfStatement, Literal,
+    LiteralExpression, PrintStatement, ReturnStatement, Statement, StructExpression,
+    StructInitializerExpression, StructStatement, UnaryExpression, VariableExpression,
     WhileStatement,
 };
 use crate::tokenizer::Token;
@@ -9,10 +10,22 @@ use std::collections::HashMap;
 
 const CAPACITY_MIN: usize = 1024;
 
+macro_rules! compiler_error {
+    ($msg:expr, $($arg:expr),*) => {{
+        eprint!("compiler error: {} ", $msg);
+        $(
+            eprint!("{}", $arg);
+        )*
+        eprint!("\n");
+        std::process::exit(1);
+    }};
+}
+
 pub struct Compiler<'src> {
     bytecode: Vec<Opcode<'src>>,
     functions: HashMap<&'src str, usize>,
     locals: Vec<&'src str>,
+    structs: HashMap<&'src str, Vec<&'src str>>,
     pops: Vec<usize>,
 }
 
@@ -28,6 +41,7 @@ impl<'src> Compiler<'src> {
             bytecode: Vec::with_capacity(CAPACITY_MIN),
             functions: HashMap::with_capacity(CAPACITY_MIN),
             locals: Vec::with_capacity(CAPACITY_MIN),
+            structs: HashMap::with_capacity(CAPACITY_MIN),
             pops: Vec::with_capacity(CAPACITY_MIN),
         }
     }
@@ -77,6 +91,7 @@ impl<'src> Codegen<'src> for Statement<'src> {
             Statement::While(while_statement) => while_statement.codegen(compiler),
             Statement::Expression(expr_statement) => expr_statement.codegen(compiler),
             Statement::Block(block_statement) => block_statement.codegen(compiler),
+            Statement::Struct(struct_statement) => struct_statement.codegen(compiler),
             Statement::Dummy => {}
         }
     }
@@ -148,6 +163,12 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
     }
 }
 
+impl<'src> Codegen<'src> for StructStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
+        compiler.structs.insert(self.name, self.members.clone());
+    }
+}
+
 impl<'src> Codegen<'src> for ExpressionStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         match &self.expression {
@@ -195,6 +216,9 @@ impl<'src> Codegen<'src> for Expression<'src> {
             Expression::Call(call) => call.codegen(compiler),
             Expression::Assign(assignment) => assignment.codegen(compiler),
             Expression::Unary(unary) => unary.codegen(compiler),
+            Expression::Get(getexp) => getexp.codegen(compiler),
+            Expression::Struct(structexp) => structexp.codegen(compiler),
+            Expression::StructInitializer(structinitexp) => structinitexp.codegen(compiler),
         }
     }
 }
@@ -329,6 +353,42 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
     }
 }
 
+impl<'src> Codegen<'src> for GetExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
+        self.expr.codegen(compiler);
+        compiler.emit_opcodes(&[Opcode::Getattr(self.member)]);
+    }
+}
+
+impl<'src> Codegen<'src> for StructExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
+        if let Some(s) = compiler.structs.get(self.name) {
+            if s.len() != self.initializers.len() {
+                compiler_error!("Struct '{}' has {} members.", s.len());
+            }
+
+            compiler.emit_opcodes(&[Opcode::Struct(self.name)]);
+
+            for init in &self.initializers {
+                init.codegen(compiler);
+            }
+        } else {
+            compiler_error!("Struct '{}' is not defined.", self.name);
+        }
+    }
+}
+
+impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) {
+        self.value.codegen(compiler);
+        if let Expression::Variable(var) = &*self.member {
+            compiler.emit_opcodes(&[Opcode::Setattr(var.value)]);
+        } else {
+            unreachable!();
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Opcode<'src> {
     Print,
@@ -351,7 +411,10 @@ pub enum Opcode<'src> {
     Ret,
     Deepget(usize),
     Deepset(usize),
+    Getattr(&'src str),
+    Setattr(&'src str),
     Strcat,
+    Struct(&'src str),
     Pop,
     Halt,
 }

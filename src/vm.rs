@@ -1,12 +1,19 @@
 use crate::compiler::Opcode;
-use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Object {
+pub enum Object<'src> {
     Number(f64),
     Bool(bool),
     String(Rc<String>),
+    Struct(Rc<RefCell<StructObject<'src>>>),
     Null,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructObject<'src> {
+    members: HashMap<&'src str, Object<'src>>,
+    name: &'src str,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -15,14 +22,18 @@ enum InternalObject {
 }
 
 macro_rules! runtime_error {
-    ($msg:expr) => {{
-        eprintln!("{}", $msg);
+    ($($arg:expr),*) => {{
+        eprint!("runtime error: ");
+        $(
+            eprint!("{}", $arg);
+        )*
+        eprint!("\n");
         std::process::exit(1);
     }};
 }
 
-impl std::ops::Add for Object {
-    type Output = Object;
+impl<'src> std::ops::Add for Object<'src> {
+    type Output = Object<'src>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -32,8 +43,8 @@ impl std::ops::Add for Object {
     }
 }
 
-impl std::ops::Sub for Object {
-    type Output = Object;
+impl<'src> std::ops::Sub for Object<'src> {
+    type Output = Object<'src>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -43,8 +54,8 @@ impl std::ops::Sub for Object {
     }
 }
 
-impl std::ops::Mul for Object {
-    type Output = Object;
+impl<'src> std::ops::Mul for Object<'src> {
+    type Output = Object<'src>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -54,8 +65,8 @@ impl std::ops::Mul for Object {
     }
 }
 
-impl std::ops::Div for Object {
-    type Output = Object;
+impl<'src> std::ops::Div for Object<'src> {
+    type Output = Object<'src>;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -65,8 +76,8 @@ impl std::ops::Div for Object {
     }
 }
 
-impl std::ops::Not for Object {
-    type Output = Object;
+impl<'src> std::ops::Not for Object<'src> {
+    type Output = Object<'src>;
 
     fn not(self) -> Self::Output {
         match self {
@@ -76,8 +87,8 @@ impl std::ops::Not for Object {
     }
 }
 
-impl std::ops::Neg for Object {
-    type Output = Object;
+impl<'src> std::ops::Neg for Object<'src> {
+    type Output = Object<'src>;
 
     fn neg(self) -> Self::Output {
         match self {
@@ -87,7 +98,7 @@ impl std::ops::Neg for Object {
     }
 }
 
-impl std::cmp::PartialOrd for Object {
+impl<'src> std::cmp::PartialOrd for Object<'src> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Object::Number(a), Object::Number(b)) => a.partial_cmp(b),
@@ -96,21 +107,27 @@ impl std::cmp::PartialOrd for Object {
     }
 }
 
-impl From<bool> for Object {
+impl<'src> From<bool> for Object<'src> {
     fn from(value: bool) -> Self {
         Self::Bool(value)
     }
 }
 
-impl From<f64> for Object {
+impl<'src> From<f64> for Object<'src> {
     fn from(value: f64) -> Self {
         Self::Number(value)
     }
 }
 
-impl From<String> for Object {
+impl<'src> From<String> for Object<'src> {
     fn from(value: String) -> Self {
         Self::String(value.into())
+    }
+}
+
+impl<'src> From<&'src str> for Object<'src> {
+    fn from(value: &'src str) -> Self {
+        Self::String(value.to_owned().into())
     }
 }
 
@@ -138,7 +155,7 @@ macro_rules! adjust_idx {
 
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode [Opcode<'src>],
-    stack: Vec<Object>,
+    stack: Vec<Object<'src>>,
     frame_ptrs: Vec<InternalObject>,
     ip: usize,
 }
@@ -182,6 +199,9 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                 Opcode::Ret => self.handle_op_ret(),
                 Opcode::Deepget(idx) => self.handle_op_deepget(idx),
                 Opcode::Deepset(idx) => self.handle_op_deepset(idx),
+                Opcode::Getattr(member) => self.handle_op_getattr(member),
+                Opcode::Setattr(member) => self.handle_op_setattr(member),
+                Opcode::Struct(name) => self.handle_op_struct(name),
                 Opcode::Strcat => self.handle_op_strcat(),
                 Opcode::Pop => self.handle_op_pop(),
                 Opcode::Halt => break,
@@ -304,6 +324,39 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
 
     fn handle_op_deepset(&mut self, idx: usize) {
         self.stack.swap_remove(adjust_idx!(self, idx));
+    }
+
+    fn handle_op_getattr(&mut self, member: &str) {
+        if let Some(Object::Struct(obj)) = self.stack.pop() {
+            match obj.borrow().members.get(member) {
+                Some(m) => self.stack.push(m.clone()),
+                None => runtime_error!(
+                    "Property '{}' is not defined on object '{}'",
+                    member,
+                    obj.borrow().name
+                ),
+            }
+        }
+    }
+
+    fn handle_op_setattr(&mut self, member: &'src str) {
+        let value = self.stack.pop().unwrap();
+        let structobj = self.stack.pop().unwrap();
+        if let Object::Struct(s) = structobj {
+            s.borrow_mut().members.insert(member, value);
+            self.stack.push(Object::Struct(s));
+        }
+    }
+
+    fn handle_op_struct(&mut self, name: &'src str) {
+        let structobj = Object::Struct(Rc::new(
+            (StructObject {
+                members: HashMap::new(),
+                name,
+            })
+            .into(),
+        ));
+        self.stack.push(structobj);
     }
 
     fn handle_op_pop(&mut self) {
