@@ -1,20 +1,5 @@
-use crate::tokenizer::Token;
+use crate::{bail_out, tokenizer::Token};
 use std::collections::VecDeque;
-
-macro_rules! parser_error {
-    ($msg:expr, $($arg:expr),*) => {{
-        eprint!("parser error: {} ", $msg);
-        $(
-            eprint!("{:?}", $arg);
-        )*
-        eprint!("\n");
-        std::process::exit(1);
-    }};
-    ($msg:expr) => {{
-        eprintln!("parser error: {}", $msg);
-        std::process::exit(1);
-    }}
-}
 
 pub struct Parser<'src> {
     current: Option<Token<'src>>,
@@ -74,7 +59,7 @@ impl<'src> Parser<'src> {
         } else if self.is_next(&[Token::Struct]) {
             self.parse_struct_statement()
         } else {
-            parser_error!("Expected a declaration (like 'fn' or 'struct')");
+            bail_out!(parser, "Expected a declaration (like 'fn' or 'struct')");
         }
     }
 
@@ -155,7 +140,7 @@ impl<'src> Parser<'src> {
     fn parse_struct_statement(&mut self) -> Statement<'src> {
         let name = match self.consume(Token::Identifier("")) {
             Some(Token::Identifier(ident)) => ident,
-            _ => parser_error!("Expected identifier after 'struct' keyword."),
+            _ => bail_out!(parser, "Expected identifier after 'struct' keyword."),
         };
         self.consume(Token::LeftBrace);
         let mut members = vec![];
@@ -168,7 +153,10 @@ impl<'src> Parser<'src> {
     fn parse_struct_member(&mut self) -> &'src str {
         let member = match self.consume(Token::Identifier("")) {
             Some(Token::Identifier(ident)) => ident,
-            _ => parser_error!("Too lazy to write an error message now."),
+            _ => bail_out!(
+                parser,
+                "Structs should be declared as: struct s { x, y, z, }."
+            ),
         };
         self.consume(Token::Comma);
         member
@@ -375,7 +363,7 @@ impl<'src> Parser<'src> {
     fn parse_struct_expression(&mut self) -> Expression<'src> {
         let name = match self.previous.unwrap() {
             Token::Identifier(ident) => ident,
-            _ => parser_error!("Too lazy to write an error message now."),
+            _ => bail_out!(parser, "Expected identifier."),
         };
 
         self.consume(Token::LeftBrace);
@@ -416,7 +404,11 @@ impl<'src> Parser<'src> {
             Token::Null => Literal::Null,
             Token::Number(n) => Literal::Num(n),
             Token::String(s) => Literal::String(s),
-            _ => parser_error!("Got unexpected token: ", self.previous.unwrap()),
+            _ => bail_out!(
+                parser,
+                "got unexpected token while trying to parse a literal: {}",
+                self.previous.unwrap()
+            ),
         };
         Expression::Literal(LiteralExpression { value: literal })
     }

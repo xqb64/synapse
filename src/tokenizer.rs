@@ -1,5 +1,7 @@
 use logos::Logos;
 
+use crate::bail_out;
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum TokenizerError {
     #[default]
@@ -117,15 +119,10 @@ pub enum Token<'src> {
     Number(f64),
 }
 
-macro_rules! tokenizer_error {
-    ($msg:expr, $($arg:expr),*) => {{
-        eprint!("tokenizer error: {} ", $msg);
-        $(
-            eprint!("{}", $arg);
-        )*
-        eprint!("\n");
-        std::process::exit(1);
-    }};
+impl std::fmt::Display for Token<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 pub struct Tokenizer<'src> {
@@ -147,7 +144,7 @@ impl<'src> Iterator for Tokenizer<'src> {
             Some(Ok(r)) => Some(r),
             Some(Err(_)) => {
                 let token = self.lexer.slice();
-                tokenizer_error!("got unexpected token:", token);
+                bail_out!(tokenizer, "got unexpected token: {}", token);
             }
             None => None,
         }

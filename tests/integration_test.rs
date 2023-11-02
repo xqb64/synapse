@@ -54,7 +54,7 @@ macro_rules! run_test {
 }
 
 macro_rules! run_test_error {
-    ($path:expr, $type:tt, $expected:expr) => {{
+    ($type:tt, $path:expr, $expected:expr) => {{
         let mut stderr = fetch_stderr($path);
         assert!(
             stderr.pop_back().unwrap() == format!("{} error: {}", stringify!($type), $expected)
@@ -70,8 +70,8 @@ fn add() {
 
 #[test]
 fn add_error() {
-    let (path, expected) = ("tests/cases/add_error.syn", "You can only + numbers.");
-    run_test_error!(path, runtime, expected);
+    let (path, expected) = ("tests/cases/add_error.syn", "only numbers can be +");
+    run_test_error!(vm, path, expected);
 }
 
 #[test]
@@ -117,9 +117,9 @@ fn relational() {
 fn relational_error() {
     let (path, expected) = (
         "tests/cases/relational_error.syn",
-        "You can only <, >, <=, >= numbers.",
+        "only numbers can be: <, >, <=, >=",
     );
-    run_test_error!(path, runtime, expected);
+    run_test_error!(vm, path, expected);
 }
 
 #[test]
@@ -169,8 +169,8 @@ fn minus_number() {
 
 #[test]
 fn neg_error() {
-    let (path, expected) = ("tests/cases/neg_error.syn", "You can only - numbers.");
-    run_test_error!(path, runtime, expected);
+    let (path, expected) = ("tests/cases/neg_error.syn", "only numbers can be -");
+    run_test_error!(vm, path, expected);
 }
 
 #[test]
@@ -181,14 +181,14 @@ fn not() {
 
 #[test]
 fn not_error() {
-    let (path, expected) = ("tests/cases/not_error.syn", "You can only ! booleans.");
-    run_test_error!(path, runtime, expected);
+    let (path, expected) = ("tests/cases/not_error.syn", "only bools can be !");
+    run_test_error!(vm, path, expected);
 }
 
 #[test]
 fn tokenizer_error() {
     let (path, expected) = ("tests/cases/tokenizer_error.syn", "got unexpected token: $");
-    run_test_error!(path, tokenizer, expected);
+    run_test_error!(tokenizer, path, expected);
 }
 
 #[test]
@@ -201,4 +201,22 @@ fn grouping() {
 fn structs() {
     let (path, expected) = ("tests/cases/structs.syn", object_vec!["Hello, world!"]);
     run_test!(path, expected);
+}
+
+#[test]
+fn struct_error01() {
+    let (path, expected) = (
+        "tests/cases/struct_error01.syn",
+        "struct 'spam' has no member 'a'",
+    );
+    run_test_error!(vm, path, expected);
+}
+
+#[test]
+fn strcat_error() {
+    let (path, expected) = (
+        "tests/cases/strcat_error.syn",
+        "only strings can be concatenated",
+    );
+    run_test_error!(vm, path, expected);
 }

@@ -1,3 +1,4 @@
+use crate::bail_out;
 use crate::parser::{
     AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
     Expression, ExpressionStatement, FnStatement, GetExpression, IfStatement, Literal,
@@ -9,21 +10,6 @@ use crate::tokenizer::Token;
 use std::collections::HashMap;
 
 const CAPACITY_MIN: usize = 1024;
-
-macro_rules! compiler_error {
-    ($msg:expr, $($arg:expr),*) => {{
-        eprint!("compiler error: {} ", $msg);
-        $(
-            eprint!("{}", $arg);
-        )*
-        eprint!("\n");
-        std::process::exit(1);
-    }};
-    ($msg:expr) => {{
-        eprintln!("{}", $msg);
-        std::process::exit(1);
-    }}
-}
 
 pub struct Compiler<'src> {
     bytecode: Vec<Opcode<'src>>,
@@ -59,7 +45,7 @@ impl<'src> Compiler<'src> {
             Some(&addr) => {
                 self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(addr), Opcode::Pop]);
             }
-            None => compiler_error!("You need to define the main fn."),
+            None => bail_out!(compiler, "The main fn was not defined."),
         }
 
         self.bytecode.push(Opcode::Halt);
@@ -376,7 +362,7 @@ impl<'src> Codegen<'src> for StructExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         if let Some(s) = compiler.structs.get(self.name) {
             if s.len() != self.initializers.len() {
-                compiler_error!("Struct '{}' has {} members.", s.len());
+                bail_out!(compiler, "struct '{}' has {} members.", self.name, s.len());
             }
 
             compiler.emit_opcodes(&[Opcode::Struct(self.name)]);
@@ -385,7 +371,7 @@ impl<'src> Codegen<'src> for StructExpression<'src> {
                 init.codegen(compiler);
             }
         } else {
-            compiler_error!("Struct '{}' is not defined.", self.name);
+            bail_out!(compiler, "struct '{}' is not defined", self.name);
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::bail_out;
 use crate::compiler::Opcode;
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -22,24 +23,13 @@ enum InternalObject {
     BytecodePtr(usize, usize),
 }
 
-macro_rules! runtime_error {
-    ($($arg:expr),*) => {{
-        eprint!("runtime error: ");
-        $(
-            eprint!("{}", $arg);
-        )*
-        eprint!("\n");
-        std::process::exit(1);
-    }};
-}
-
 impl<'src> std::ops::Add for Object<'src> {
     type Output = Object<'src>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a + b).into(),
-            _ => runtime_error!("You can only + numbers."),
+            _ => bail_out!(vm, "only numbers can be +"),
         }
     }
 }
@@ -50,7 +40,7 @@ impl<'src> std::ops::Sub for Object<'src> {
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a - b).into(),
-            _ => runtime_error!("You can only - numbers."),
+            _ => bail_out!(vm, "only numbers can be -"),
         }
     }
 }
@@ -61,7 +51,7 @@ impl<'src> std::ops::Mul for Object<'src> {
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a * b).into(),
-            _ => runtime_error!("You can only * numbers."),
+            _ => bail_out!(vm, "only numbers can be *"),
         }
     }
 }
@@ -72,7 +62,7 @@ impl<'src> std::ops::Div for Object<'src> {
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => (a / b).into(),
-            _ => runtime_error!("You can only / numbers."),
+            _ => bail_out!(vm, "only numbers can be /"),
         }
     }
 }
@@ -83,7 +73,7 @@ impl<'src> std::ops::Not for Object<'src> {
     fn not(self) -> Self::Output {
         match self {
             Object::Bool(b) => (!b).into(),
-            _ => runtime_error!("You can only ! booleans."),
+            _ => bail_out!(vm, "only bools can be !"),
         }
     }
 }
@@ -94,7 +84,7 @@ impl<'src> std::ops::Neg for Object<'src> {
     fn neg(self) -> Self::Output {
         match self {
             Object::Number(b) => (-b).into(),
-            _ => runtime_error!("You can only - numbers."),
+            _ => bail_out!(vm, "only numbers can be -"),
         }
     }
 }
@@ -103,7 +93,7 @@ impl<'src> std::cmp::PartialOrd for Object<'src> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Object::Number(a), Object::Number(b)) => a.partial_cmp(b),
-            _ => runtime_error!("You can only <, >, <=, >= numbers."),
+            _ => bail_out!(vm, "only numbers can be: <, >, <=, >="),
         }
     }
 }
@@ -234,7 +224,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                     .push(format!("{}{}", a.to_owned(), b.to_owned()).into());
             }
             _ => {
-                runtime_error!("Can only concatenate two strings.");
+                bail_out!(vm, "only strings can be concatenated");
             }
         }
     }
@@ -332,10 +322,11 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         if let Some(Object::Struct(obj)) = self.stack.pop() {
             match obj.borrow().members.get(member) {
                 Some(m) => self.stack.push(m.clone()),
-                None => runtime_error!(
-                    "Property '{}' is not defined on object '{}'",
-                    member,
-                    obj.borrow().name
+                None => bail_out!(
+                    vm,
+                    "struct '{}' has no member '{}'",
+                    obj.borrow().name,
+                    member
                 ),
             }
         }
