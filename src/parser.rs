@@ -141,10 +141,10 @@ impl<'src> Parser<'src> {
     fn parse_struct_statement(&mut self) -> Statement<'src> {
         let name = match self.consume(Token::Identifier("")) {
             Some(Token::Identifier(ident)) => ident,
-            _ => bail_out!(
+            Some(_) | None => bail_out!(
                 parser,
                 "expected identifier after 'struct' keyword, got: {}",
-                self.current.unwrap()
+                self.current.unwrap().get_value()
             ),
         };
         self.consume(Token::LeftBrace);
@@ -157,8 +157,8 @@ impl<'src> Parser<'src> {
 
     fn parse_struct_member(&mut self) -> &'src str {
         let member = match self.consume(Token::Identifier("")) {
-            Some(Token::Identifier(ident)) => ident,
-            _ => bail_out!(
+            Some(token) => token.get_value(),
+            None => bail_out!(
                 parser,
                 "structs should be declared as: `struct s { x, y, z, }`"
             ),
@@ -316,12 +316,11 @@ impl<'src> Parser<'src> {
                     arguments,
                 });
             } else if self.is_next(&[Token::Dot]) {
-                if let Some(Token::Identifier(ident)) = self.consume(Token::Identifier("")) {
-                    expr = Expression::Get(GetExpression {
-                        expr: expr.into(),
-                        member: ident,
-                    })
-                };
+                let member = self.consume(Token::Identifier("")).unwrap().get_value();
+                expr = Expression::Get(GetExpression {
+                    expr: expr.into(),
+                    member,
+                })
             } else {
                 break;
             }
@@ -330,9 +329,9 @@ impl<'src> Parser<'src> {
     }
 
     fn primary(&mut self) -> Expression<'src> {
-        if self.is_next(&[Token::Number(0.0), Token::String("")]) {
+        if self.is_next(&[Token::Number(""), Token::String("")]) {
             match self.previous.unwrap() {
-                Token::Number(n) => self.parse_number(n),
+                Token::Number(n) => self.parse_number(n.parse().unwrap()),
                 Token::String(s) => self.parse_string(s),
                 _ => unreachable!(),
             }
@@ -369,10 +368,7 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_struct_expression(&mut self) -> Expression<'src> {
-        let name = match self.previous.unwrap() {
-            Token::Identifier(ident) => ident,
-            _ => unreachable!(),
-        };
+        let name = self.previous.unwrap().get_value();
 
         self.consume(Token::LeftBrace);
 
@@ -397,12 +393,8 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_variable(&mut self) -> Expression<'src> {
-        match self.previous {
-            Some(Token::Identifier(ident)) => {
-                Expression::Variable(VariableExpression { value: ident })
-            }
-            _ => unreachable!(),
-        }
+        let value = self.previous.unwrap().get_value();
+        Expression::Variable(VariableExpression { value })
     }
 
     fn parse_literal(&mut self) -> Expression<'src> {

@@ -243,7 +243,7 @@ fn parser_error_expected_identifier_when_instantiating_struct() {
 fn parser_error_expected_identifier_after_struct_keyword() {
     let (path, expected) = (
         "tests/cases/parser_error_expected_identifier_after_struct_keyword.syn",
-        "expected identifier after 'struct' keyword, got: Number(1.0)",
+        "expected identifier after 'struct' keyword, got: 1",
     );
     run_test_error!(parser, path, expected);
 }

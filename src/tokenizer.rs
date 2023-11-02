@@ -115,8 +115,19 @@ pub enum Token<'src> {
     #[regex("[a-zA-Z_]+")]
     Identifier(&'src str),
 
-    #[regex(r"[0-9]+(\.[0-9]+)?", |lex| lex.slice().parse().ok())]
-    Number(f64),
+    #[regex(r"[0-9]+(\.[0-9]+)?")]
+    Number(&'src str),
+}
+
+impl<'src> Token<'src> {
+    pub fn get_value(&self) -> &'src str {
+        match self {
+            Token::Identifier(ident) => ident,
+            Token::String(s) => s,
+            Token::Number(n) => n,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl std::fmt::Display for Token<'_> {

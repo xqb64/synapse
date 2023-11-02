@@ -106,22 +106,13 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) {
         let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
 
-        let name = match self.name {
-            Token::Identifier(ident) => ident,
-            _ => unreachable!(),
-        };
-
         let arguments: Vec<&'src str> = self
             .arguments
             .iter()
-            .map(|&token| {
-                if let Token::Identifier(ident) = token {
-                    ident
-                } else {
-                    unreachable!();
-                }
-            })
+            .map(|&token| token.get_value())
             .collect();
+
+        let name = self.name.get_value();
 
         let f = Function {
             name,
@@ -131,11 +122,7 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
         compiler.functions.insert(name, f);
 
         for argument in &self.arguments {
-            if let Token::Identifier(ident) = argument {
-                compiler.locals.push(ident);
-            } else {
-                unreachable!();
-            }
+            compiler.locals.push(argument.get_value());
         }
 
         compiler.pops.push(compiler.locals.len());
