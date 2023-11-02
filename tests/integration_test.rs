@@ -54,9 +54,11 @@ macro_rules! run_test {
 }
 
 macro_rules! run_test_error {
-    ($path:expr, $expected:expr) => {{
+    ($path:expr, $type:tt, $expected:expr) => {{
         let mut stderr = fetch_stderr($path);
-        assert!(stderr.pop_back().unwrap() == $expected);
+        assert!(
+            stderr.pop_back().unwrap() == format!("{} error: {}", stringify!($type), $expected)
+        );
     }};
 }
 
@@ -69,7 +71,7 @@ fn add() {
 #[test]
 fn add_error() {
     let (path, expected) = ("tests/cases/add_error.syn", "You can only + numbers.");
-    run_test_error!(path, expected);
+    run_test_error!(path, runtime, expected);
 }
 
 #[test]
@@ -117,7 +119,7 @@ fn relational_error() {
         "tests/cases/relational_error.syn",
         "You can only <, >, <=, >= numbers.",
     );
-    run_test_error!(path, expected);
+    run_test_error!(path, runtime, expected);
 }
 
 #[test]
@@ -168,7 +170,7 @@ fn minus_number() {
 #[test]
 fn neg_error() {
     let (path, expected) = ("tests/cases/neg_error.syn", "You can only - numbers.");
-    run_test_error!(path, expected);
+    run_test_error!(path, runtime, expected);
 }
 
 #[test]
@@ -180,20 +182,23 @@ fn not() {
 #[test]
 fn not_error() {
     let (path, expected) = ("tests/cases/not_error.syn", "You can only ! booleans.");
-    run_test_error!(path, expected);
+    run_test_error!(path, runtime, expected);
 }
 
 #[test]
 fn tokenizer_error() {
-    let (path, expected) = (
-        "tests/cases/tokenizer_error.syn",
-        "tokenizer error: got unexpected token: $",
-    );
-    run_test_error!(path, expected);
+    let (path, expected) = ("tests/cases/tokenizer_error.syn", "got unexpected token: $");
+    run_test_error!(path, tokenizer, expected);
 }
 
 #[test]
 fn grouping() {
     let (path, expected) = ("tests/cases/grouping.syn", object_vec![14.0]);
+    run_test!(path, expected);
+}
+
+#[test]
+fn structs() {
+    let (path, expected) = ("tests/cases/structs.syn", object_vec!["Hello, world!"]);
     run_test!(path, expected);
 }

@@ -28,6 +28,9 @@ pub enum Token<'src> {
     #[token("while")]
     While,
 
+    #[token("struct")]
+    Struct,
+
     #[token("true")]
     True,
 
@@ -75,6 +78,12 @@ pub enum Token<'src> {
 
     #[token("++")]
     PlusPlus,
+
+    #[token(".")]
+    Dot,
+
+    #[token(":")]
+    Colon,
 
     #[token(";")]
     Semicolon,

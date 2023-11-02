@@ -1,6 +1,21 @@
 use crate::tokenizer::Token;
 use std::collections::VecDeque;
 
+macro_rules! parser_error {
+    ($msg:expr, $($arg:expr),*) => {{
+        eprint!("parser error: {} ", $msg);
+        $(
+            eprint!("{:?}", $arg);
+        )*
+        eprint!("\n");
+        std::process::exit(1);
+    }};
+    ($msg:expr) => {{
+        eprintln!("parser error: {}", $msg);
+        std::process::exit(1);
+    }}
+}
+
 pub struct Parser<'src> {
     current: Option<Token<'src>>,
     previous: Option<Token<'src>>,
@@ -21,7 +36,7 @@ impl<'src> Parser<'src> {
         self.advance();
         let mut statements = vec![];
         while self.current.is_some() {
-            statements.push(self.parse_statement());
+            statements.push(self.parse_declaration());
         }
         statements
     }
@@ -53,11 +68,19 @@ impl<'src> Parser<'src> {
         None
     }
 
+    fn parse_declaration(&mut self) -> Statement<'src> {
+        if self.is_next(&[Token::Fn]) {
+            self.parse_fn_statement()
+        } else if self.is_next(&[Token::Struct]) {
+            self.parse_struct_statement()
+        } else {
+            parser_error!("Expected a declaration (like 'fn' or 'struct')");
+        }
+    }
+
     fn parse_statement(&mut self) -> Statement<'src> {
         if self.is_next(&[Token::Print]) {
             self.parse_print_statement()
-        } else if self.is_next(&[Token::Fn]) {
-            self.parse_fn_statement()
         } else if self.is_next(&[Token::Return]) {
             self.parse_return_statement()
         } else if self.is_next(&[Token::If]) {
@@ -127,6 +150,28 @@ impl<'src> Parser<'src> {
             condition,
             body: body.into(),
         })
+    }
+
+    fn parse_struct_statement(&mut self) -> Statement<'src> {
+        let name = match self.consume(Token::Identifier("")) {
+            Some(Token::Identifier(ident)) => ident,
+            _ => parser_error!("Expected identifier after 'struct' keyword."),
+        };
+        self.consume(Token::LeftBrace);
+        let mut members = vec![];
+        while !self.is_next(&[Token::RightBrace]) {
+            members.push(self.parse_struct_member());
+        }
+        Statement::Struct(StructStatement { name, members })
+    }
+
+    fn parse_struct_member(&mut self) -> &'src str {
+        let member = match self.consume(Token::Identifier("")) {
+            Some(Token::Identifier(ident)) => ident,
+            _ => parser_error!("Too lazy to write an error message now."),
+        };
+        self.consume(Token::Comma);
+        member
     }
 
     fn parse_block_statement(&mut self) -> Statement<'src> {
@@ -257,73 +302,123 @@ impl<'src> Parser<'src> {
 
     fn call(&mut self) -> Expression<'src> {
         let mut expr = self.primary();
-        if self.is_next(&[Token::LeftParen]) {
-            let mut arguments = vec![];
-            if !self.check(Token::RightParen) {
-                loop {
-                    arguments.push(self.parse_expression());
-                    if !self.is_next(&[Token::Comma]) {
-                        break;
+        loop {
+            if self.is_next(&[Token::LeftParen]) {
+                let mut arguments = vec![];
+                if !self.check(Token::RightParen) {
+                    loop {
+                        arguments.push(self.parse_expression());
+                        if !self.is_next(&[Token::Comma]) {
+                            break;
+                        }
                     }
                 }
+                self.consume(Token::RightParen);
+                let name = match expr {
+                    Expression::Variable(v) => v.value,
+                    _ => unimplemented!(),
+                };
+                expr = Expression::Call(CallExpression {
+                    variable: name,
+                    arguments,
+                });
+            } else if self.is_next(&[Token::Dot]) {
+                if let Some(Token::Identifier(ident)) = self.consume(Token::Identifier("")) {
+                    expr = Expression::Get(GetExpression {
+                        expr: expr.into(),
+                        member: ident,
+                    })
+                };
+            } else {
+                break;
             }
-            self.consume(Token::RightParen);
-            let name = match expr {
-                Expression::Variable(v) => v.value,
-                _ => unimplemented!(),
-            };
-            expr = Expression::Call(CallExpression {
-                variable: name,
-                arguments,
-            });
         }
         expr
     }
 
-    fn grouping(&mut self) -> Expression<'src> {
+    fn primary(&mut self) -> Expression<'src> {
+        if self.is_next(&[Token::Number(0.0), Token::String("")]) {
+            match self.previous.unwrap() {
+                Token::Number(n) => self.parse_number(n),
+                Token::String(s) => self.parse_string(s),
+                _ => unreachable!(),
+            }
+        } else if self.is_next(&[Token::LeftParen]) {
+            self.parse_grouping()
+        } else if self.is_next(&[Token::True, Token::False, Token::Null]) {
+            self.parse_literal()
+        } else if self.is_next(&[Token::Identifier("")]) {
+            if self.check(Token::LeftBrace) {
+                self.parse_struct_expression()
+            } else {
+                self.parse_variable()
+            }
+        } else {
+            todo!();
+        }
+    }
+
+    fn parse_number(&mut self, n: f64) -> Expression<'src> {
+        Expression::Literal(LiteralExpression { value: n.into() })
+    }
+
+    fn parse_string(&mut self, s: &'src str) -> Expression<'src> {
+        Expression::Literal(LiteralExpression { value: s.into() })
+    }
+
+    fn parse_grouping(&mut self) -> Expression<'src> {
         let expr = self.parse_expression();
         self.consume(Token::RightParen);
         expr
     }
 
-    fn primary(&mut self) -> Expression<'src> {
-        if self.is_next(&[Token::Number(0.0)]) {
-            if let Token::Number(n) = self.previous.unwrap() {
-                Expression::Literal(LiteralExpression {
-                    value: Literal::Num(n),
-                })
-            } else {
-                unreachable!();
-            }
-        } else if self.is_next(&[Token::LeftParen]) {
-            self.grouping()
-        } else if self.is_next(&[Token::True, Token::False, Token::Null]) {
-            let literal = match self.previous.unwrap() {
-                Token::True => "true",
-                Token::False => "false",
-                Token::Null => "null",
-                _ => unreachable!(),
-            };
-            Expression::Literal(LiteralExpression {
-                value: literal.into(),
-            })
-        } else if self.is_next(&[Token::Identifier("")]) {
-            if let Token::Identifier(var) = self.previous.unwrap() {
-                Expression::Variable(VariableExpression { value: var })
-            } else {
-                unreachable!();
-            }
-        } else if self.is_next(&[Token::String("")]) {
-            if let Token::String(string) = self.previous.unwrap() {
-                Expression::Literal(LiteralExpression {
-                    value: Literal::String(string),
-                })
-            } else {
-                unreachable!();
-            }
-        } else {
-            todo!();
+    fn parse_struct_expression(&mut self) -> Expression<'src> {
+        let name = match self.previous.unwrap() {
+            Token::Identifier(ident) => ident,
+            _ => parser_error!("Too lazy to write an error message now."),
+        };
+
+        self.consume(Token::LeftBrace);
+
+        let mut initializers = vec![];
+        while !self.is_next(&[Token::RightBrace]) {
+            initializers.push(self.parse_struct_initializer());
+            self.consume(Token::Comma);
         }
+
+        Expression::Struct(StructExpression { name, initializers })
+    }
+
+    fn parse_struct_initializer(&mut self) -> Expression<'src> {
+        let member = self.parse_expression();
+        self.consume(Token::Colon);
+        let value = self.parse_expression();
+
+        Expression::StructInitializer(StructInitializerExpression {
+            member: member.into(),
+            value: value.into(),
+        })
+    }
+
+    fn parse_variable(&mut self) -> Expression<'src> {
+        match self.previous {
+            Some(Token::Identifier(ident)) => {
+                Expression::Variable(VariableExpression { value: ident })
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_literal(&mut self) -> Expression<'src> {
+        let literal = match self.previous.unwrap() {
+            Token::True => Literal::Bool(true),
+            Token::False => Literal::Bool(false),
+            Token::Null => Literal::Null,
+            Token::Number(n) => Literal::Num(n),
+            Token::String(s) => Literal::String(s),
+            _ => parser_error!("Got unexpected token: ", self.previous.unwrap()),
+        };
+        Expression::Literal(LiteralExpression { value: literal })
     }
 }
 
@@ -340,6 +435,7 @@ pub enum Statement<'src> {
     Return(ReturnStatement<'src>),
     If(IfStatement<'src>),
     While(WhileStatement<'src>),
+    Struct(StructStatement<'src>),
     Block(BlockStatement<'src>),
     Expression(ExpressionStatement<'src>),
     Dummy,
@@ -376,6 +472,12 @@ pub struct WhileStatement<'src> {
 }
 
 #[derive(Debug)]
+pub struct StructStatement<'src> {
+    pub name: &'src str,
+    pub members: Vec<&'src str>,
+}
+
+#[derive(Debug)]
 pub struct BlockStatement<'src> {
     pub body: Vec<Statement<'src>>,
 }
@@ -393,6 +495,9 @@ pub enum Expression<'src> {
     Call(CallExpression<'src>),
     Assign(AssignExpression<'src>),
     Unary(UnaryExpression<'src>),
+    Get(GetExpression<'src>),
+    Struct(StructExpression<'src>),
+    StructInitializer(StructInitializerExpression<'src>),
 }
 
 #[derive(Debug)]
@@ -431,6 +536,24 @@ pub struct UnaryExpression<'src> {
 }
 
 #[derive(Debug)]
+pub struct StructExpression<'src> {
+    pub name: &'src str,
+    pub initializers: Vec<Expression<'src>>,
+}
+
+#[derive(Debug)]
+pub struct StructInitializerExpression<'src> {
+    pub member: Box<Expression<'src>>,
+    pub value: Box<Expression<'src>>,
+}
+
+#[derive(Debug)]
+pub struct GetExpression<'src> {
+    pub expr: Box<Expression<'src>>,
+    pub member: &'src str,
+}
+
+#[derive(Debug)]
 pub enum BinaryExpressionKind {
     Add,
     Sub,
@@ -452,13 +575,14 @@ pub enum Literal<'src> {
     Null,
 }
 
+impl<'src> From<f64> for Literal<'src> {
+    fn from(value: f64) -> Self {
+        Self::Num(value)
+    }
+}
+
 impl<'src> From<&'src str> for Literal<'src> {
-    fn from(s: &'src str) -> Self {
-        match s {
-            "true" => Literal::Bool(true),
-            "false" => Literal::Bool(false),
-            "null" => Literal::Null,
-            _ => unreachable!(),
-        }
+    fn from(value: &'src str) -> Self {
+        Self::String(value)
     }
 }

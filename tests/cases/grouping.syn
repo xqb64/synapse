@@ -1,8 +1,10 @@
-fn main() {
+fn f() {
     x = 2;
     y = 3;
     z = 4;
     return (x + (y*z));
 }
 
-print main();
+fn main() {
+    print f();
+}

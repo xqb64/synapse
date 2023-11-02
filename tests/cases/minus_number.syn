@@ -1,6 +1,8 @@
-fn main() {
+fn f() {
     x = -3.14;
     return -x;
 }
 
-print main();
+fn main() {
+    print f();
+}
