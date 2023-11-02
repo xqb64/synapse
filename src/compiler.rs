@@ -123,14 +123,12 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
             })
             .collect();
 
-        {
-            let f = Function {
-                name,
-                location: jmp_idx,
-                paramcount: arguments.len(),
-            };
-            compiler.functions.insert(name, f);
-        }
+        let f = Function {
+            name,
+            location: jmp_idx,
+            paramcount: arguments.len(),
+        };
+        compiler.functions.insert(name, f);
 
         for argument in &self.arguments {
             if let Token::Identifier(ident) = argument {
