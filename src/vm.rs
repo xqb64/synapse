@@ -1,6 +1,6 @@
 use crate::compiler::Opcode;
 use anyhow::{bail, Result};
-use segvec::SegVec;
+use segvec::{Linear, SegVec};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -171,7 +171,7 @@ macro_rules! adjust_idx {
 
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode [Opcode<'src>],
-    stack: SegVec<Object<'src>>,
+    stack: SegVec<Object<'src>, Linear<STACK_MIN>>,
     frame_ptrs: Vec<InternalObject>,
     ip: usize,
 }
