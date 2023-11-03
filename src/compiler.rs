@@ -1,4 +1,3 @@
-use crate::bail_out;
 use crate::parser::{
     AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
     Expression, ExpressionStatement, FnStatement, GetExpression, IfStatement, Literal,
@@ -7,6 +6,7 @@ use crate::parser::{
     WhileStatement,
 };
 use crate::tokenizer::Token;
+use anyhow::{bail, Result};
 use std::collections::HashMap;
 
 const CAPACITY_MIN: usize = 1024;
@@ -36,20 +36,20 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    pub fn compile(&mut self, ast: &[Statement<'src>]) -> &[Opcode<'src>] {
+    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&[Opcode<'src>]> {
         for statement in ast {
-            statement.codegen(self);
+            statement.codegen(self)?;
         }
 
         match self.functions.get("main") {
             Some(f) => {
                 self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(f.location), Opcode::Pop]);
             }
-            None => bail_out!(compiler, "main fn was not defined"),
+            None => bail!("compiler: main fn was not defined"),
         }
 
         self.bytecode.push(Opcode::Halt);
-        self.bytecode.as_slice()
+        Ok(self.bytecode.as_slice())
     }
 
     fn emit_opcodes(&mut self, opcodes: &[Opcode<'src>]) -> usize {
@@ -80,30 +80,34 @@ impl<'src> Compiler<'src> {
 }
 
 impl<'src> Codegen<'src> for Statement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         match self {
-            Statement::Print(print_statement) => print_statement.codegen(compiler),
-            Statement::Fn(fn_statement) => fn_statement.codegen(compiler),
-            Statement::Return(return_statement) => return_statement.codegen(compiler),
-            Statement::If(if_statement) => if_statement.codegen(compiler),
-            Statement::While(while_statement) => while_statement.codegen(compiler),
-            Statement::Expression(expr_statement) => expr_statement.codegen(compiler),
-            Statement::Block(block_statement) => block_statement.codegen(compiler),
-            Statement::Struct(struct_statement) => struct_statement.codegen(compiler),
+            Statement::Print(print_statement) => print_statement.codegen(compiler)?,
+            Statement::Fn(fn_statement) => fn_statement.codegen(compiler)?,
+            Statement::Return(return_statement) => return_statement.codegen(compiler)?,
+            Statement::If(if_statement) => if_statement.codegen(compiler)?,
+            Statement::While(while_statement) => while_statement.codegen(compiler)?,
+            Statement::Expression(expr_statement) => expr_statement.codegen(compiler)?,
+            Statement::Block(block_statement) => block_statement.codegen(compiler)?,
+            Statement::Struct(struct_statement) => struct_statement.codegen(compiler)?,
             Statement::Dummy => {}
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for PrintStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
-        self.expression.codegen(compiler);
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.expression.codegen(compiler)?;
         compiler.emit_opcodes(&[Opcode::Print]);
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for FnStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
 
         let arguments: Vec<&'src str> = self
@@ -128,7 +132,7 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
         compiler.pops.push(compiler.locals.len());
 
         if let Statement::Block(block) = &*self.body {
-            block.codegen(compiler);
+            block.codegen(compiler)?;
         }
 
         compiler.emit_stack_cleanup();
@@ -138,96 +142,111 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
         compiler.patch_jmp(jmp_idx);
 
         compiler.locals.clear();
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for IfStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
-        self.condition.codegen(compiler);
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.condition.codegen(compiler)?;
 
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
-        self.if_branch.codegen(compiler);
+        self.if_branch.codegen(compiler)?;
         compiler.patch_jmp(jz_idx);
 
         let else_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
-        self.else_branch.codegen(compiler);
+        self.else_branch.codegen(compiler)?;
         compiler.patch_jmp(else_idx);
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for WhileStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let loop_start = compiler.bytecode.len() - 1;
-        self.condition.codegen(compiler);
+        self.condition.codegen(compiler)?;
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
-        self.body.codegen(compiler);
+        self.body.codegen(compiler)?;
         compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
         compiler.patch_jmp(jz_idx);
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for StructStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         compiler.structs.insert(self.name, self.members.clone());
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for ExpressionStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         match &self.expression {
             Expression::Call(call_expr) => {
-                call_expr.codegen(compiler);
+                call_expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Pop]);
             }
             Expression::Assign(assign_expr) => {
-                assign_expr.codegen(compiler);
+                assign_expr.codegen(compiler)?;
             }
             _ => unreachable!(),
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for ReturnStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
-        self.expression.codegen(compiler);
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.expression.codegen(compiler)?;
         let mut deepset_no = compiler.locals.len() - 1;
         for _ in 0..compiler.locals.len() {
             compiler.emit_opcodes(&[Opcode::Deepset(deepset_no)]);
             deepset_no = deepset_no.saturating_sub(1);
         }
         compiler.emit_opcodes(&[Opcode::Ret]);
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for BlockStatement<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         compiler.pops.push(0);
         for statement in &self.body {
-            statement.codegen(compiler);
+            statement.codegen(compiler)?;
         }
         compiler.emit_stack_cleanup();
         compiler.pops.pop();
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for Expression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         match self {
-            Expression::Literal(literal) => literal.codegen(compiler),
-            Expression::Variable(varexp) => varexp.codegen(compiler),
-            Expression::Binary(binexp) => binexp.codegen(compiler),
-            Expression::Call(call) => call.codegen(compiler),
-            Expression::Assign(assignment) => assignment.codegen(compiler),
-            Expression::Unary(unary) => unary.codegen(compiler),
-            Expression::Get(getexp) => getexp.codegen(compiler),
-            Expression::Struct(structexp) => structexp.codegen(compiler),
-            Expression::StructInitializer(structinitexp) => structinitexp.codegen(compiler),
+            Expression::Literal(literal) => literal.codegen(compiler)?,
+            Expression::Variable(varexp) => varexp.codegen(compiler)?,
+            Expression::Binary(binexp) => binexp.codegen(compiler)?,
+            Expression::Call(call) => call.codegen(compiler)?,
+            Expression::Assign(assignment) => assignment.codegen(compiler)?,
+            Expression::Unary(unary) => unary.codegen(compiler)?,
+            Expression::Get(getexp) => getexp.codegen(compiler)?,
+            Expression::Struct(structexp) => structexp.codegen(compiler)?,
+            Expression::StructInitializer(structinitexp) => structinitexp.codegen(compiler)?,
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for LiteralExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         match &self.value {
             Literal::Num(n) => {
                 compiler.emit_opcodes(&[Opcode::Const(*n)]);
@@ -247,11 +266,13 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
                 compiler.emit_opcodes(&[Opcode::Null]);
             }
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for VariableExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let local = compiler.resolve_local(self.value);
 
         if let Some(idx) = local {
@@ -261,13 +282,15 @@ impl<'src> Codegen<'src> for VariableExpression<'src> {
             let idx = compiler.resolve_local(self.value).unwrap();
             compiler.emit_opcodes(&[Opcode::Deepget(idx)]);
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for BinaryExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
-        self.lhs.codegen(compiler);
-        self.rhs.codegen(compiler);
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.lhs.codegen(compiler)?;
+        self.rhs.codegen(compiler)?;
 
         match self.kind {
             BinaryExpressionKind::Add => {
@@ -304,23 +327,24 @@ impl<'src> Codegen<'src> for BinaryExpression<'src> {
                 compiler.emit_opcodes(&[Opcode::Strcat]);
             }
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for CallExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let f = compiler.functions.get(&self.variable);
 
         if f.is_none() {
-            bail_out!(compiler, "function '{}' is not defined", self.variable);
+            bail!("compiler: function '{}' is not defined", self.variable);
         }
 
         let f = f.unwrap();
 
         if f.paramcount != self.arguments.len() {
-            bail_out!(
-                compiler,
-                "function '{}' takes {} arguments",
+            bail!(
+                "compiler: function '{}' takes {} arguments",
                 f.name,
                 f.paramcount
             );
@@ -329,20 +353,22 @@ impl<'src> Codegen<'src> for CallExpression<'src> {
         let addr = f.location;
 
         for argument in &self.arguments {
-            argument.codegen(compiler);
+            argument.codegen(compiler)?;
         }
 
         compiler.emit_opcodes(&[Opcode::Call(self.arguments.len()), Opcode::Jmp(addr)]);
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for AssignExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let variable_name = match &*self.lhs {
             Expression::Variable(variable) => &variable.value,
             _ => unimplemented!(),
         };
-        self.rhs.codegen(compiler);
+        self.rhs.codegen(compiler)?;
 
         let local = compiler.resolve_local(variable_name);
 
@@ -354,58 +380,68 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                 *last += 1;
             }
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for UnaryExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         match self.op {
             Token::Minus => {
-                self.expr.codegen(compiler);
+                self.expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Neg]);
             }
             Token::Bang => {
-                self.expr.codegen(compiler);
+                self.expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Not]);
             }
             _ => unreachable!(),
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for GetExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
-        self.expr.codegen(compiler);
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.expr.codegen(compiler)?;
         compiler.emit_opcodes(&[Opcode::Getattr(self.member)]);
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for StructExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         if let Some(s) = compiler.structs.get(self.name) {
             if s.len() != self.initializers.len() {
-                bail_out!(compiler, "struct '{}' has {} members", self.name, s.len());
+                bail!("compiler: struct '{}' has {} members", self.name, s.len());
             }
 
             compiler.emit_opcodes(&[Opcode::Struct(self.name)]);
 
             for init in &self.initializers {
-                init.codegen(compiler);
+                init.codegen(compiler)?;
             }
         } else {
-            bail_out!(compiler, "struct '{}' is not defined", self.name);
+            bail!("compiler: struct '{}' is not defined", self.name);
         }
+
+        Ok(())
     }
 }
 
 impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
-    fn codegen(&self, compiler: &mut Compiler<'src>) {
-        self.value.codegen(compiler);
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.value.codegen(compiler)?;
         if let Expression::Variable(var) = &*self.member {
             compiler.emit_opcodes(&[Opcode::Setattr(var.value)]);
         } else {
             unreachable!();
         }
+
+        Ok(())
     }
 }
 
@@ -440,7 +476,9 @@ pub enum Opcode<'src> {
 }
 
 trait Codegen<'src> {
-    fn codegen(&self, _compiler: &mut Compiler<'src>) {}
+    fn codegen(&self, _compiler: &mut Compiler<'src>) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -1,14 +1,11 @@
 use logos::Logos;
-
-use crate::bail_out;
-
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum TokenizerError {
     #[default]
     Other,
 }
 
-#[derive(Logos, Debug, PartialEq, Clone, Copy)]
+#[derive(Logos, Debug, PartialEq, Clone, Copy, Default)]
 #[logos(skip r"[ \t\n\f]+")]
 #[logos(error = TokenizerError)]
 pub enum Token<'src> {
@@ -117,6 +114,9 @@ pub enum Token<'src> {
 
     #[regex(r"[0-9]+(\.[0-9]+)?")]
     Number(&'src str),
+
+    #[default]
+    Error,
 }
 
 impl<'src> Token<'src> {
@@ -137,7 +137,7 @@ impl std::fmt::Display for Token<'_> {
 }
 
 pub struct Tokenizer<'src> {
-    lexer: logos::Lexer<'src, Token<'src>>,
+    pub lexer: logos::Lexer<'src, Token<'src>>,
 }
 
 impl<'src> Tokenizer<'src> {
@@ -146,6 +146,10 @@ impl<'src> Tokenizer<'src> {
             lexer: Token::lexer(src),
         }
     }
+
+    pub fn get_lexer(&self) -> &logos::Lexer<'src, Token<'src>> {
+        &self.lexer
+    }
 }
 
 impl<'src> Iterator for Tokenizer<'src> {
@@ -153,10 +157,7 @@ impl<'src> Iterator for Tokenizer<'src> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.lexer.next() {
             Some(Ok(r)) => Some(r),
-            Some(Err(_)) => {
-                let token = self.lexer.slice();
-                bail_out!(tokenizer, "got unexpected token: {}", token);
-            }
+            Some(Err(_)) => Some(Token::Error),
             None => None,
         }
     }

@@ -57,7 +57,7 @@ macro_rules! run_test_error {
     ($type:tt, $path:expr, $expected:expr) => {{
         let mut stderr = fetch_stderr($path);
         assert!(
-            stderr.pop_back().unwrap() == format!("{} error: {}", stringify!($type), $expected)
+            stderr.pop_back().unwrap() == format!("Error: {}: {}", stringify!($type), $expected)
         );
     }};
 }
@@ -77,6 +77,12 @@ fn add_error() {
 #[test]
 fn sub() {
     let (path, expected) = ("tests/cases/sub.syn", object_vec![2.0]);
+    run_test!(path, expected);
+}
+
+#[test]
+fn sub_neg() {
+    let (path, expected) = ("tests/cases/sub_neg.syn", object_vec![6.0]);
     run_test!(path, expected);
 }
 
@@ -187,7 +193,7 @@ fn not_error() {
 
 #[test]
 fn tokenizer_error() {
-    let (path, expected) = ("tests/cases/tokenizer_error.syn", "got unexpected token: $");
+    let (path, expected) = ("tests/cases/tokenizer_error.syn", "unexpected token: $");
     run_test_error!(tokenizer, path, expected);
 }
 
