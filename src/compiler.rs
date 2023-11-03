@@ -43,7 +43,7 @@ impl<'src> Compiler<'src> {
 
         match self.functions.get("main") {
             Some(f) => {
-                self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(f.location), Opcode::Pop]);
+                self.emit_opcodes(&[Opcode::Call(0), Opcode::Jmp(f.location), Opcode::Pop(1)]);
             }
             None => bail!("compiler: main fn was not defined"),
         }
@@ -61,9 +61,7 @@ impl<'src> Compiler<'src> {
 
     fn emit_stack_cleanup(&mut self) {
         let popcount = self.pops.last().unwrap();
-        for _ in 0..*popcount {
-            self.bytecode.push(Opcode::Pop);
-        }
+        self.bytecode.push(Opcode::Pop(*popcount));
     }
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
@@ -120,10 +118,11 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
 
         let f = Function {
             name,
+            localscount: 0,
             location: jmp_idx,
             paramcount: arguments.len(),
         };
-        compiler.functions.insert(name, f);
+        compiler.functions.insert(name, f.clone());
 
         for argument in &self.arguments {
             compiler.locals.push(argument.get_value());
@@ -135,13 +134,13 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
             block.codegen(compiler)?;
         }
 
-        compiler.emit_stack_cleanup();
-
-        compiler.emit_opcodes(&[Opcode::Null, Opcode::Ret]);
-
         compiler.patch_jmp(jmp_idx);
 
+        let f = compiler.functions.get_mut(f.name).unwrap();
+        f.localscount = compiler.locals.len();
+
         compiler.locals.clear();
+        compiler.pops.clear();
 
         Ok(())
     }
@@ -188,7 +187,7 @@ impl<'src> Codegen<'src> for ExpressionStatement<'src> {
         match &self.expression {
             Expression::Call(call_expr) => {
                 call_expr.codegen(compiler)?;
-                compiler.emit_opcodes(&[Opcode::Pop]);
+                compiler.emit_opcodes(&[Opcode::Pop(1)]);
             }
             Expression::Assign(assign_expr) => {
                 assign_expr.codegen(compiler)?;
@@ -203,12 +202,13 @@ impl<'src> Codegen<'src> for ExpressionStatement<'src> {
 impl<'src> Codegen<'src> for ReturnStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.expression.codegen(compiler)?;
-        let mut deepset_no = compiler.locals.len() - 1;
+        let mut deepset_no = compiler.locals.len().saturating_sub(1);
         for _ in 0..compiler.locals.len() {
             compiler.emit_opcodes(&[Opcode::Deepset(deepset_no)]);
             deepset_no = deepset_no.saturating_sub(1);
         }
         compiler.emit_opcodes(&[Opcode::Ret]);
+        compiler.emit_stack_cleanup();
 
         Ok(())
     }
@@ -219,6 +219,9 @@ impl<'src> Codegen<'src> for BlockStatement<'src> {
         compiler.pops.push(0);
         for statement in &self.body {
             statement.codegen(compiler)?;
+        }
+        for _ in 0..*compiler.pops.last().unwrap() {
+            compiler.locals.pop();
         }
         compiler.emit_stack_cleanup();
         compiler.pops.pop();
@@ -364,22 +367,50 @@ impl<'src> Codegen<'src> for CallExpression<'src> {
 
 impl<'src> Codegen<'src> for AssignExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
-        let variable_name = match &*self.lhs {
-            Expression::Variable(variable) => &variable.value,
+        match &*self.lhs {
+            Expression::Variable(variable) => {
+                self.rhs.codegen(compiler)?;
+
+                let local = compiler.resolve_local(variable.value);
+
+                if let Some(idx) = local {
+                    compiler.emit_opcodes(&[Opcode::Deepset(idx)]);
+                } else {
+                    compiler.locals.push(variable.value);
+                    if let Some(last) = compiler.pops.last_mut() {
+                        *last += 1;
+                    }
+                }
+            }
+            Expression::Unary(_) => {
+                self.rhs.codegen(compiler)?;
+
+                let mut current = self.lhs.clone();
+                let mut deref_count = 0;
+                while match *current.clone() {
+                    Expression::Unary(u) => {
+                        current = u.expr;
+                        deref_count += 1;
+                        true
+                    }
+                    _ => false,
+                } {}
+
+                if let Expression::Variable(var) = *current.clone() {
+                    let local = compiler.resolve_local(var.value);
+                    if let Some(idx) = local {
+                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx, deref_count)]);
+                    } else {
+                        compiler.locals.push(var.value);
+                        let idx = compiler.resolve_local(var.value).unwrap();
+                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx, deref_count)]);
+                    }
+                } else {
+                    bail!("compiler: tried to deref a non-var");
+                }
+            }
             _ => unimplemented!(),
         };
-        self.rhs.codegen(compiler)?;
-
-        let local = compiler.resolve_local(variable_name);
-
-        if let Some(idx) = local {
-            compiler.emit_opcodes(&[Opcode::Deepset(idx)]);
-        } else {
-            compiler.locals.push(variable_name);
-            if let Some(last) = compiler.pops.last_mut() {
-                *last += 1;
-            }
-        }
 
         Ok(())
     }
@@ -395,6 +426,23 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
             Token::Bang => {
                 self.expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Not]);
+            }
+            Token::Ampersand => match &*self.expr {
+                Expression::Variable(var) => {
+                    let local = compiler.resolve_local(var.value);
+                    if let Some(idx) = local {
+                        compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
+                    } else {
+                        compiler.locals.push(var.value);
+                        let idx = compiler.resolve_local(var.value).unwrap();
+                        compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
+                    }
+                }
+                _ => bail!("compiler: expected variable"),
+            },
+            Token::Star => {
+                self.expr.codegen(compiler)?;
+                compiler.emit_opcodes(&[Opcode::Deref]);
             }
             _ => unreachable!(),
         }
@@ -466,12 +514,15 @@ pub enum Opcode<'src> {
     Call(usize),
     Ret,
     Deepget(usize),
+    DeepgetPtr(usize),
     Deepset(usize),
+    DeepsetDeref(usize, usize),
+    Deref,
     Getattr(&'src str),
     Setattr(&'src str),
     Strcat,
     Struct(&'src str),
-    Pop,
+    Pop(usize),
     Halt,
 }
 
@@ -484,6 +535,7 @@ trait Codegen<'src> {
 #[derive(Debug, Clone)]
 struct Function<'src> {
     name: &'src str,
-    paramcount: usize,
     location: usize,
+    paramcount: usize,
+    localscount: usize,
 }

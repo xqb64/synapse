@@ -307,3 +307,9 @@ fn compiler_error_fn_not_defined() {
     );
     run_test_error!(compiler, path, expected);
 }
+
+#[test]
+fn ptr() {
+    let (path, expected) = ("tests/cases/ptr.syn", object_vec![3.0]);
+    run_test!(path, expected);
+}

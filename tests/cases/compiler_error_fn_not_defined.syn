@@ -1,7 +1,9 @@
 fn g(x, y, z) {
     print x + y + z;
+    return 0;
 }
 
 fn main() {
     f(1, 2, 3);
+    return 0;
 }

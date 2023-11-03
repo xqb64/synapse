@@ -15,4 +15,5 @@ fn main() {
     print false != false;
     print true != true;
     print null != null;
+    return 0;
 }

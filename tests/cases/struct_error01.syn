@@ -7,4 +7,5 @@ struct spam {
 fn main() {
     x = spam { x: 0, y: 0, z: 0 };
     print x.a;
+    return 0;
 }

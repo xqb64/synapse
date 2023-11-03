@@ -5,4 +5,5 @@ fn f() {
 
 fn main() {
     print f();
+    return 0;
 }

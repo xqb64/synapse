@@ -1,5 +1,6 @@
 use crate::compiler::Opcode;
 use anyhow::{bail, Result};
+use segvec::SegVec;
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -9,6 +10,7 @@ pub enum Object<'src> {
     Bool(bool),
     String(Rc<Cow<'src, str>>),
     Struct(Rc<RefCell<StructObject<'src>>>),
+    Ptr(*mut Object<'src>),
     Null,
 }
 
@@ -169,9 +171,28 @@ macro_rules! adjust_idx {
 
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode [Opcode<'src>],
-    stack: Vec<Object<'src>>,
+    stack: SegVec<Object<'src>>,
     frame_ptrs: Vec<InternalObject>,
     ip: usize,
+}
+
+fn follow_ptr<'src>(target: &Object<'src>, deref_count: usize) -> *mut Object<'src> {
+    let mut current_ptr = match target {
+        Object::Ptr(ptr) => *ptr,
+        _ => panic!("Expected a pointer object."),
+    };
+
+    for _ in 0..deref_count - 1 {
+        unsafe {
+            if let Object::Ptr(ptr) = &*current_ptr {
+                current_ptr = *ptr;
+            } else {
+                panic!("Expected a pointer object after dereferencing.");
+            }
+        }
+    }
+
+    current_ptr
 }
 
 const STACK_MIN: usize = 1024;
@@ -180,7 +201,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     pub fn new(bytecode: &'bytecode [Opcode<'src>]) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
-            stack: Vec::with_capacity(STACK_MIN),
+            stack: SegVec::with_capacity(STACK_MIN),
             frame_ptrs: Vec::with_capacity(STACK_MIN),
             ip: 0,
         }
@@ -212,12 +233,17 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                 Opcode::Call(n) => self.handle_op_call(n),
                 Opcode::Ret => self.handle_op_ret(),
                 Opcode::Deepget(idx) => self.handle_op_deepget(idx),
+                Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(idx),
                 Opcode::Deepset(idx) => self.handle_op_deepset(idx),
+                Opcode::DeepsetDeref(idx, deref_count) => {
+                    self.handle_op_deepsetderef(idx, deref_count)?
+                }
+                Opcode::Deref => self.handle_op_deref()?,
                 Opcode::Getattr(member) => self.handle_op_getattr(member)?,
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
                 Opcode::Strcat => self.handle_op_strcat()?,
-                Opcode::Pop => self.handle_op_pop(),
+                Opcode::Pop(popcount) => self.handle_op_pop(popcount),
                 Opcode::Halt => break Ok(()),
             }
 
@@ -351,12 +377,39 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_deepget(&mut self, idx: usize) {
-        let item = unsafe { self.stack.get_unchecked(adjust_idx!(self, idx)) }.clone();
-        self.stack.push(item);
+        let item = self.stack.get(adjust_idx!(self, idx)).unwrap();
+        self.stack.push(item.clone());
+    }
+
+    fn handle_op_deepgetptr(&mut self, idx: usize) {
+        let item = self.stack.get_mut(adjust_idx!(self, idx)).unwrap();
+        let ptr = item as *mut Object<'_>;
+        self.stack.push(Object::Ptr(ptr));
     }
 
     fn handle_op_deepset(&mut self, idx: usize) {
-        self.stack.swap_remove(adjust_idx!(self, idx));
+        self.stack[adjust_idx!(self, idx)] = pop!(self.stack);
+    }
+
+    fn handle_op_deepsetderef(&mut self, idx: usize, deref_count: usize) -> Result<()> {
+        let obj = pop!(self.stack);
+        let target = self.stack.get_mut(adjust_idx!(self, idx)).unwrap();
+        let ptr = follow_ptr(target, deref_count);
+
+        unsafe {
+            *ptr = obj;
+        }
+
+        Ok(())
+    }
+
+    fn handle_op_deref(&mut self) -> Result<()> {
+        match pop!(self.stack) {
+            Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
+            _ => bail!("vm: tried to deref a non-ptr"),
+        }
+
+        Ok(())
     }
 
     fn handle_op_getattr(&mut self, member: &str) -> Result<()> {
@@ -394,7 +447,9 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         self.stack.push(structobj);
     }
 
-    fn handle_op_pop(&mut self) {
-        pop!(self.stack);
+    fn handle_op_pop(&mut self, popcount: usize) {
+        for _ in 0..popcount {
+            pop!(self.stack);
+        }
     }
 }

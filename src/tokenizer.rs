@@ -102,6 +102,9 @@ pub enum Token<'src> {
     #[token(",")]
     Comma,
 
+    #[token("&")]
+    Ampersand,
+
     /* It is not possible to use capture groups.
      *
      * https://github.com/maciejhirsz/logos/issues/327

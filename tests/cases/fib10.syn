@@ -5,4 +5,5 @@ fn fib(n) {
 
 fn main() {
     print fib(10);
+    return 0;
 }

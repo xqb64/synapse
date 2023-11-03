@@ -1,4 +1,5 @@
 fn main() {
     x = false;
     print -x;
+    return 0;
 }
