@@ -8,11 +8,12 @@ use crate::parser::{
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 const CAPACITY_MIN: usize = 1024;
 
 pub struct Compiler<'src> {
-    bytecode: Vec<Opcode<'src>>,
+    bytecode: Vec<Opcode>,
     functions: HashMap<&'src str, Function<'src>>,
     locals: Vec<&'src str>,
     structs: HashMap<&'src str, Vec<&'src str>>,
@@ -36,7 +37,7 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&[Opcode<'src>]> {
+    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&[Opcode]> {
         for statement in ast {
             statement.codegen(self)?;
         }
@@ -52,9 +53,9 @@ impl<'src> Compiler<'src> {
         Ok(self.bytecode.as_slice())
     }
 
-    fn emit_opcodes(&mut self, opcodes: &[Opcode<'src>]) -> usize {
+    fn emit_opcodes(&mut self, opcodes: &[Opcode]) -> usize {
         for opcode in opcodes {
-            self.bytecode.push(*opcode);
+            self.bytecode.push(opcode.clone());
         }
         self.bytecode.len() - opcodes.len()
     }
@@ -263,7 +264,7 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
                 }
             },
             Literal::String(s) => {
-                compiler.emit_opcodes(&[Opcode::Str(s)]);
+                compiler.emit_opcodes(&[Opcode::Str(s.to_string().into())]);
             }
             Literal::Null => {
                 compiler.emit_opcodes(&[Opcode::Null]);
@@ -399,11 +400,11 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                 if let Expression::Variable(var) = *current.clone() {
                     let local = compiler.resolve_local(var.value);
                     if let Some(idx) = local {
-                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx, deref_count)]);
+                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx as u32, deref_count)]);
                     } else {
                         compiler.locals.push(var.value);
                         let idx = compiler.resolve_local(var.value).unwrap();
-                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx, deref_count)]);
+                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx as u32, deref_count)]);
                     }
                 } else {
                     bail!("compiler: tried to deref a non-var");
@@ -454,7 +455,7 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
 impl<'src> Codegen<'src> for GetExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.expr.codegen(compiler)?;
-        compiler.emit_opcodes(&[Opcode::Getattr(self.member)]);
+        compiler.emit_opcodes(&[Opcode::Getattr(self.member.to_string().into())]);
 
         Ok(())
     }
@@ -467,7 +468,7 @@ impl<'src> Codegen<'src> for StructExpression<'src> {
                 bail!("compiler: struct '{}' has {} members", self.name, s.len());
             }
 
-            compiler.emit_opcodes(&[Opcode::Struct(self.name)]);
+            compiler.emit_opcodes(&[Opcode::Struct(self.name.to_string().into())]);
 
             for init in &self.initializers {
                 init.codegen(compiler)?;
@@ -484,7 +485,7 @@ impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.value.codegen(compiler)?;
         if let Expression::Variable(var) = &*self.member {
-            compiler.emit_opcodes(&[Opcode::Setattr(var.value)]);
+            compiler.emit_opcodes(&[Opcode::Setattr(var.value.to_string().into())]);
         } else {
             unreachable!();
         }
@@ -493,8 +494,8 @@ impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Opcode<'src> {
+#[derive(Debug, Clone)]
+pub enum Opcode {
     Print,
     Const(f64),
     Add,
@@ -508,7 +509,7 @@ pub enum Opcode<'src> {
     Eq,
     Lt,
     Gt,
-    Str(&'src str),
+    Str(Rc<String>),
     Jmp(usize),
     Jz(usize),
     Call(usize),
@@ -516,12 +517,12 @@ pub enum Opcode<'src> {
     Deepget(usize),
     DeepgetPtr(usize),
     Deepset(usize),
-    DeepsetDeref(usize, usize),
+    DeepsetDeref(u32, u32),
     Deref,
-    Getattr(&'src str),
-    Setattr(&'src str),
+    Getattr(Rc<String>),
+    Setattr(Rc<String>),
     Strcat,
-    Struct(&'src str),
+    Struct(Rc<String>),
     Pop(usize),
     Halt,
 }
