@@ -1,5 +1,5 @@
-use crate::bail_out;
 use crate::compiler::Opcode;
+use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -24,67 +24,67 @@ enum InternalObject {
 }
 
 impl<'src> std::ops::Add for Object<'src> {
-    type Output = Object<'src>;
+    type Output = Result<Object<'src>>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => (a + b).into(),
-            _ => bail_out!(vm, "only numbers can be +"),
+            (Object::Number(a), Object::Number(b)) => Ok((a + b).into()),
+            _ => bail!("vm: only numbers can be +"),
         }
     }
 }
 
 impl<'src> std::ops::Sub for Object<'src> {
-    type Output = Object<'src>;
+    type Output = Result<Object<'src>>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => (a - b).into(),
-            _ => bail_out!(vm, "only numbers can be -"),
+            (Object::Number(a), Object::Number(b)) => Ok((a - b).into()),
+            _ => bail!("vm: only numbers can be -"),
         }
     }
 }
 
 impl<'src> std::ops::Mul for Object<'src> {
-    type Output = Object<'src>;
+    type Output = Result<Object<'src>>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => (a * b).into(),
-            _ => bail_out!(vm, "only numbers can be *"),
+            (Object::Number(a), Object::Number(b)) => Ok((a * b).into()),
+            _ => bail!("vm: only numbers can be *"),
         }
     }
 }
 
 impl<'src> std::ops::Div for Object<'src> {
-    type Output = Object<'src>;
+    type Output = Result<Object<'src>>;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => (a / b).into(),
-            _ => bail_out!(vm, "only numbers can be /"),
+            (Object::Number(a), Object::Number(b)) => Ok((a / b).into()),
+            _ => bail!("vm: only numbers can be /"),
         }
     }
 }
 
 impl<'src> std::ops::Not for Object<'src> {
-    type Output = Object<'src>;
+    type Output = Result<Object<'src>>;
 
     fn not(self) -> Self::Output {
         match self {
-            Object::Bool(b) => (!b).into(),
-            _ => bail_out!(vm, "only bools can be !"),
+            Object::Bool(b) => Ok((!b).into()),
+            _ => bail!("vm: only bools can be !"),
         }
     }
 }
 
 impl<'src> std::ops::Neg for Object<'src> {
-    type Output = Object<'src>;
+    type Output = Result<Object<'src>>;
 
     fn neg(self) -> Self::Output {
         match self {
-            Object::Number(b) => (-b).into(),
-            _ => bail_out!(vm, "only numbers can be -"),
+            Object::Number(b) => Ok((-b).into()),
+            _ => bail!("vm: only numbers can be -"),
         }
     }
 }
@@ -93,7 +93,7 @@ impl<'src> std::cmp::PartialOrd for Object<'src> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Object::Number(a), Object::Number(b)) => a.partial_cmp(b),
-            _ => bail_out!(vm, "only numbers can be: <, >, <=, >="),
+            _ => None,
         }
     }
 }
@@ -122,12 +122,35 @@ impl<'src> From<&'src str> for Object<'src> {
     }
 }
 
-macro_rules! binop {
-    ($self:tt, $op:tt) => {
+macro_rules! pop {
+    ($stack:expr) => {{
+        unsafe { $stack.pop().unwrap_unchecked() }
+    }};
+}
+
+macro_rules! binop_arithmetic {
+    ($stack:expr, $op:tt) => {
         {
-            let b = $self.stack.pop().unwrap();
-            let a = $self.stack.pop().unwrap();
-            $self.stack.push((a $op b).into());
+            let b = pop!($stack);
+            let a = pop!($stack);
+            let res = (a $op b);
+            match res {
+                Ok(r) => $stack.push(r.into()),
+                Err(e) => bail!(e),
+            }
+        }
+    };
+}
+
+macro_rules! binop_relational {
+    ($stack:expr, $op:tt) => {
+        {
+            let b = pop!($stack);
+            let a = pop!($stack);
+            if std::mem::discriminant(&a) != std::mem::discriminant(&b) {
+                bail!("vm: only numbers can be: <, >, <=, >=");
+            }
+            $stack.push((a $op b).into());
         }
     };
 }
@@ -163,7 +186,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<()> {
         loop {
             if cfg!(debug_assertions) {
                 println!("current instruction: {:?}", self.bytecode[self.ip]);
@@ -173,29 +196,29 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                 Opcode::Const(n) => self.handle_op_const(n),
                 Opcode::Str(s) => self.handle_op_str(s),
                 Opcode::Print => self.handle_op_print(),
-                Opcode::Add => self.handle_op_add(),
-                Opcode::Sub => self.handle_op_sub(),
-                Opcode::Mul => self.handle_op_mul(),
-                Opcode::Div => self.handle_op_div(),
+                Opcode::Add => self.handle_op_add()?,
+                Opcode::Sub => self.handle_op_sub()?,
+                Opcode::Mul => self.handle_op_mul()?,
+                Opcode::Div => self.handle_op_div()?,
                 Opcode::False => self.handle_op_false(),
-                Opcode::Not => self.handle_op_not(),
-                Opcode::Neg => self.handle_op_neg(),
+                Opcode::Not => self.handle_op_not()?,
+                Opcode::Neg => self.handle_op_neg()?,
                 Opcode::Null => self.handle_op_null(),
                 Opcode::Eq => self.handle_op_eq(),
-                Opcode::Lt => self.handle_op_lt(),
-                Opcode::Gt => self.handle_op_gt(),
+                Opcode::Lt => self.handle_op_lt()?,
+                Opcode::Gt => self.handle_op_gt()?,
                 Opcode::Jmp(addr) => self.handle_op_jmp(addr),
                 Opcode::Jz(addr) => self.handle_op_jz(addr),
                 Opcode::Call(n) => self.handle_op_call(n),
                 Opcode::Ret => self.handle_op_ret(),
                 Opcode::Deepget(idx) => self.handle_op_deepget(idx),
                 Opcode::Deepset(idx) => self.handle_op_deepset(idx),
-                Opcode::Getattr(member) => self.handle_op_getattr(member),
+                Opcode::Getattr(member) => self.handle_op_getattr(member)?,
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
-                Opcode::Strcat => self.handle_op_strcat(),
+                Opcode::Strcat => self.handle_op_strcat()?,
                 Opcode::Pop => self.handle_op_pop(),
-                Opcode::Halt => break,
+                Opcode::Halt => break Ok(()),
             }
 
             if cfg!(debug_assertions) {
@@ -214,9 +237,9 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         self.stack.push(s.into());
     }
 
-    fn handle_op_strcat(&mut self) {
-        let b = self.stack.pop().unwrap();
-        let a = self.stack.pop().unwrap();
+    fn handle_op_strcat(&mut self) -> Result<()> {
+        let b = pop!(self.stack);
+        let a = pop!(self.stack);
 
         match (a, b) {
             (Object::String(a), Object::String(b)) => {
@@ -224,49 +247,61 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                     .push(format!("{}{}", a.to_owned(), b.to_owned()).into());
             }
             _ => {
-                bail_out!(vm, "only strings can be concatenated");
+                bail!("vm: only strings can be concatenated");
             }
         }
+
+        Ok(())
     }
 
     fn handle_op_print(&mut self) {
-        let obj = self.stack.pop();
-        if let Some(o) = obj {
-            if cfg!(debug_assertions) {
-                print!("dbg: ");
-            }
-            println!("{:?}", o);
+        let obj = pop!(self.stack);
+        if cfg!(debug_assertions) {
+            print!("dbg: ");
         }
+        println!("{:?}", obj);
     }
 
-    fn handle_op_add(&mut self) {
-        binop!(self, +);
+    fn handle_op_add(&mut self) -> Result<()> {
+        binop_arithmetic!(self.stack, +);
+
+        Ok(())
     }
 
-    fn handle_op_sub(&mut self) {
-        binop!(self, -);
+    fn handle_op_sub(&mut self) -> Result<()> {
+        binop_arithmetic!(self.stack, -);
+
+        Ok(())
     }
 
-    fn handle_op_mul(&mut self) {
-        binop!(self, *);
+    fn handle_op_mul(&mut self) -> Result<()> {
+        binop_arithmetic!(self.stack, *);
+
+        Ok(())
     }
 
-    fn handle_op_div(&mut self) {
-        binop!(self, /);
+    fn handle_op_div(&mut self) -> Result<()> {
+        binop_arithmetic!(self.stack, /);
+
+        Ok(())
     }
 
     fn handle_op_false(&mut self) {
         self.stack.push(false.into());
     }
 
-    fn handle_op_not(&mut self) {
-        let obj = self.stack.pop().unwrap();
-        self.stack.push(!obj);
+    fn handle_op_not(&mut self) -> Result<()> {
+        let obj = pop!(self.stack);
+        self.stack.push((!obj)?);
+
+        Ok(())
     }
 
-    fn handle_op_neg(&mut self) {
-        let obj = self.stack.pop().unwrap();
-        self.stack.push(-obj);
+    fn handle_op_neg(&mut self) -> Result<()> {
+        let obj = pop!(self.stack);
+        self.stack.push((-obj)?);
+
+        Ok(())
     }
 
     fn handle_op_null(&mut self) {
@@ -274,15 +309,21 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_eq(&mut self) {
-        binop!(self, ==);
+        let b = pop!(self.stack);
+        let a = pop!(self.stack);
+        self.stack.push((a == b).into())
     }
 
-    fn handle_op_lt(&mut self) {
-        binop!(self, <);
+    fn handle_op_lt(&mut self) -> Result<()> {
+        binop_relational!(self.stack, <);
+
+        Ok(())
     }
 
-    fn handle_op_gt(&mut self) {
-        binop!(self, >);
+    fn handle_op_gt(&mut self) -> Result<()> {
+        binop_relational!(self.stack, >);
+
+        Ok(())
     }
 
     fn handle_op_jmp(&mut self, addr: usize) {
@@ -290,7 +331,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_jz(&mut self, addr: usize) {
-        let item = self.stack.pop().unwrap();
+        let item = pop!(self.stack);
         if let Object::Bool(_b @ false) = item {
             self.ip = addr;
         }
@@ -304,7 +345,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_ret(&mut self) {
-        let retaddr = self.frame_ptrs.pop().unwrap();
+        let retaddr = pop!(self.frame_ptrs);
         let InternalObject::BytecodePtr(ptr, _) = retaddr;
         self.ip = ptr;
     }
@@ -318,23 +359,24 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         self.stack.swap_remove(adjust_idx!(self, idx));
     }
 
-    fn handle_op_getattr(&mut self, member: &str) {
+    fn handle_op_getattr(&mut self, member: &str) -> Result<()> {
         if let Some(Object::Struct(obj)) = self.stack.pop() {
             match obj.borrow().members.get(member) {
                 Some(m) => self.stack.push(m.clone()),
-                None => bail_out!(
-                    vm,
-                    "struct '{}' has no member '{}'",
+                None => bail!(
+                    "vm: struct '{}' has no member '{}'",
                     obj.borrow().name,
                     member
                 ),
             }
         }
+
+        Ok(())
     }
 
     fn handle_op_setattr(&mut self, member: &'src str) {
-        let value = self.stack.pop().unwrap();
-        let structobj = self.stack.pop().unwrap();
+        let value = pop!(self.stack);
+        let structobj = pop!(self.stack);
         if let Object::Struct(s) = structobj {
             s.borrow_mut().members.insert(member, value);
             self.stack.push(Object::Struct(s));
@@ -353,6 +395,6 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_pop(&mut self) {
-        self.stack.pop();
+        pop!(self.stack);
     }
 }

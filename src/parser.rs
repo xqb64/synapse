@@ -1,5 +1,5 @@
-use crate::bail_out;
 use crate::tokenizer::Token;
+use anyhow::{bail, Result};
 use std::collections::VecDeque;
 
 pub struct Parser<'src> {
@@ -17,14 +17,20 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub fn parse(&mut self, tokens: &'src mut VecDeque<Token<'src>>) -> Vec<Statement<'src>> {
+    pub fn parse(
+        &mut self,
+        tokens: &'src mut VecDeque<Token<'src>>,
+    ) -> Result<Vec<Statement<'src>>> {
         self.tokens = Some(tokens);
         self.advance();
         let mut statements = vec![];
         while self.current.is_some() {
-            statements.push(self.parse_declaration());
+            statements.push(match self.parse_declaration() {
+                Ok(stmt) => stmt,
+                Err(e) => bail!(e),
+            });
         }
-        statements
+        Ok(statements)
     }
 
     fn is_next(&mut self, tokens: &[Token]) -> bool {
@@ -54,17 +60,17 @@ impl<'src> Parser<'src> {
         None
     }
 
-    fn parse_declaration(&mut self) -> Statement<'src> {
+    fn parse_declaration(&mut self) -> Result<Statement<'src>> {
         if self.is_next(&[Token::Fn]) {
             self.parse_fn_statement()
         } else if self.is_next(&[Token::Struct]) {
             self.parse_struct_statement()
         } else {
-            bail_out!(parser, "expected a declaration (like 'fn' or 'struct')");
+            bail!("parser: expected a declaration (like 'fn' or 'struct')");
         }
     }
 
-    fn parse_statement(&mut self) -> Statement<'src> {
+    fn parse_statement(&mut self) -> Result<Statement<'src>> {
         if self.is_next(&[Token::Print]) {
             self.parse_print_statement()
         } else if self.is_next(&[Token::Return]) {
@@ -80,13 +86,13 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_print_statement(&mut self) -> Statement<'src> {
-        let expression = self.parse_expression();
+    fn parse_print_statement(&mut self) -> Result<Statement<'src>> {
+        let expression = self.parse_expression()?;
         self.consume(Token::Semicolon);
-        Statement::Print(PrintStatement { expression })
+        Ok(Statement::Print(PrintStatement { expression }))
     }
 
-    fn parse_fn_statement(&mut self) -> Statement<'src> {
+    fn parse_fn_statement(&mut self) -> Result<Statement<'src>> {
         let name = self.consume(Token::Identifier("")).unwrap();
         self.consume(Token::LeftParen);
         let mut arguments = vec![];
@@ -96,108 +102,109 @@ impl<'src> Parser<'src> {
             arguments.push(arg);
         }
         self.consume(Token::LeftBrace);
-        let body = self.parse_block_statement();
-        Statement::Fn(FnStatement {
+        let body = self.parse_block_statement()?;
+        Ok(Statement::Fn(FnStatement {
             name,
             arguments,
             body: body.into(),
-        })
+        }))
     }
 
-    fn parse_return_statement(&mut self) -> Statement<'src> {
-        let expression = self.parse_expression();
+    fn parse_return_statement(&mut self) -> Result<Statement<'src>> {
+        let expression = self.parse_expression()?;
         self.consume(Token::Semicolon);
-        Statement::Return(ReturnStatement { expression })
+        Ok(Statement::Return(ReturnStatement { expression }))
     }
 
-    fn parse_if_statement(&mut self) -> Statement<'src> {
+    fn parse_if_statement(&mut self) -> Result<Statement<'src>> {
         self.consume(Token::LeftParen);
-        let condition = self.parse_expression();
+        let condition = self.parse_expression()?;
         self.consume(Token::RightParen);
-        let if_branch = self.parse_statement();
+        let if_branch = self.parse_statement()?;
         let else_branch: Statement = if self.is_next(&[Token::Else]) {
-            self.parse_statement()
+            self.parse_statement()?
         } else {
             Statement::Dummy
         };
-        Statement::If(IfStatement {
+        Ok(Statement::If(IfStatement {
             condition,
             if_branch: if_branch.into(),
             else_branch: else_branch.into(),
-        })
+        }))
     }
 
-    fn parse_while_statement(&mut self) -> Statement<'src> {
+    fn parse_while_statement(&mut self) -> Result<Statement<'src>> {
         self.consume(Token::LeftParen);
-        let condition = self.parse_expression();
+        let condition = self.parse_expression()?;
         self.consume(Token::RightParen);
-        let body = self.parse_statement();
-        Statement::While(WhileStatement {
+        let body = self.parse_statement()?;
+        Ok(Statement::While(WhileStatement {
             condition,
             body: body.into(),
-        })
+        }))
     }
 
-    fn parse_struct_statement(&mut self) -> Statement<'src> {
+    fn parse_struct_statement(&mut self) -> Result<Statement<'src>> {
         let name = match self.consume(Token::Identifier("")) {
             Some(Token::Identifier(ident)) => ident,
-            Some(_) | None => bail_out!(
-                parser,
-                "expected identifier after 'struct' keyword, got: {}",
+            Some(_) | None => bail!(
+                "parser: expected identifier after 'struct' keyword, got: {}",
                 self.current.unwrap().get_value()
             ),
         };
         self.consume(Token::LeftBrace);
         let mut members = vec![];
         while !self.is_next(&[Token::RightBrace]) {
-            members.push(self.parse_struct_member());
+            members.push(match self.parse_struct_member() {
+                Ok(member) => member,
+                Err(e) => bail!(e),
+            });
         }
-        Statement::Struct(StructStatement { name, members })
+        Ok(Statement::Struct(StructStatement { name, members }))
     }
 
-    fn parse_struct_member(&mut self) -> &'src str {
+    fn parse_struct_member(&mut self) -> Result<&'src str> {
         let member = match self.consume(Token::Identifier("")) {
             Some(token) => token.get_value(),
-            None => bail_out!(
-                parser,
-                "structs should be declared as: `struct s { x, y, z, }`"
-            ),
+            None => bail!("parser: structs should be declared as: `struct s {{ x, y, z, }}`"),
         };
         self.consume(Token::Comma);
-        member
+        Ok(member)
     }
 
-    fn parse_block_statement(&mut self) -> Statement<'src> {
+    fn parse_block_statement(&mut self) -> Result<Statement<'src>> {
         let mut body = vec![];
         while !self.is_next(&[Token::RightBrace]) {
-            body.push(self.parse_statement());
+            body.push(self.parse_statement()?);
         }
-        Statement::Block(BlockStatement { body })
+        Ok(Statement::Block(BlockStatement { body }))
     }
 
-    fn parse_expression_statement(&mut self) -> Statement<'src> {
-        let expr = self.parse_expression();
+    fn parse_expression_statement(&mut self) -> Result<Statement<'src>> {
+        let expr = self.parse_expression()?;
         self.consume(Token::Semicolon);
-        Statement::Expression(ExpressionStatement { expression: expr })
+        Ok(Statement::Expression(ExpressionStatement {
+            expression: expr,
+        }))
     }
 
-    fn parse_expression(&mut self) -> Expression<'src> {
+    fn parse_expression(&mut self) -> Result<Expression<'src>> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Expression<'src> {
-        let mut result = self.equality();
+    fn assignment(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.equality()?;
         while self.is_next(&[Token::Equal]) {
             result = Expression::Assign(AssignExpression {
                 lhs: result.into(),
-                rhs: self.equality().into(),
+                rhs: self.equality()?.into(),
             })
         }
-        result
+        Ok(result)
     }
 
-    fn equality(&mut self) -> Expression<'src> {
-        let mut result = self.relational();
+    fn equality(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.relational()?;
         while self.is_next(&[Token::DoubleEqual, Token::BangEqual]) {
             let negation = match self.previous.unwrap() {
                 Token::BangEqual => true,
@@ -207,14 +214,14 @@ impl<'src> Parser<'src> {
             result = Expression::Binary(BinaryExpression {
                 kind: BinaryExpressionKind::Equality(negation),
                 lhs: result.into(),
-                rhs: self.relational().into(),
+                rhs: self.relational()?.into(),
             });
         }
-        result
+        Ok(result)
     }
 
-    fn relational(&mut self) -> Expression<'src> {
-        let mut result = self.term();
+    fn relational(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.term()?;
         while self.is_next(&[
             Token::Less,
             Token::Greater,
@@ -234,14 +241,14 @@ impl<'src> Parser<'src> {
             result = Expression::Binary(BinaryExpression {
                 kind,
                 lhs: result.into(),
-                rhs: self.term().into(),
+                rhs: self.term()?.into(),
             });
         }
-        result
+        Ok(result)
     }
 
-    fn term(&mut self) -> Expression<'src> {
-        let mut result = self.factor();
+    fn term(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.factor()?;
         while self.is_next(&[Token::Plus, Token::Minus, Token::PlusPlus]) {
             let kind = match self.previous {
                 Some(token) => match token {
@@ -255,14 +262,14 @@ impl<'src> Parser<'src> {
             result = Expression::Binary(BinaryExpression {
                 kind,
                 lhs: result.into(),
-                rhs: self.factor().into(),
+                rhs: self.factor()?.into(),
             });
         }
-        result
+        Ok(result)
     }
 
-    fn factor(&mut self) -> Expression<'src> {
-        let mut result = self.unary();
+    fn factor(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.unary()?;
         while self.is_next(&[Token::Star, Token::Slash]) {
             let kind = match self.previous {
                 Some(token) => match token {
@@ -275,32 +282,32 @@ impl<'src> Parser<'src> {
             result = Expression::Binary(BinaryExpression {
                 kind,
                 lhs: result.into(),
-                rhs: self.unary().into(),
+                rhs: self.unary()?.into(),
             });
         }
-        result
+        Ok(result)
     }
 
-    fn unary(&mut self) -> Expression<'src> {
+    fn unary(&mut self) -> Result<Expression<'src>> {
         if self.is_next(&[Token::Minus, Token::Bang]) {
             let op = self.previous.unwrap();
-            let expr = self.unary();
-            return Expression::Unary(UnaryExpression {
+            let expr = self.unary()?;
+            return Ok(Expression::Unary(UnaryExpression {
                 expr: expr.into(),
                 op,
-            });
+            }));
         }
         self.call()
     }
 
-    fn call(&mut self) -> Expression<'src> {
-        let mut expr = self.primary();
+    fn call(&mut self) -> Result<Expression<'src>> {
+        let mut expr = self.primary()?;
         loop {
             if self.is_next(&[Token::LeftParen]) {
                 let mut arguments = vec![];
                 if !self.check(Token::RightParen) {
                     loop {
-                        arguments.push(self.parse_expression());
+                        arguments.push(self.parse_expression()?);
                         if !self.is_next(&[Token::Comma]) {
                             break;
                         }
@@ -325,10 +332,10 @@ impl<'src> Parser<'src> {
                 break;
             }
         }
-        expr
+        Ok(expr)
     }
 
-    fn primary(&mut self) -> Expression<'src> {
+    fn primary(&mut self) -> Result<Expression<'src>> {
         if self.is_next(&[Token::Number(""), Token::String("")]) {
             match self.previous.unwrap() {
                 Token::Number(n) => self.parse_number(n.parse().unwrap()),
@@ -346,65 +353,62 @@ impl<'src> Parser<'src> {
                 self.parse_variable()
             }
         } else {
-            bail_out!(
-                parser,
-                "expected: number, string, (, true, false, null, identifier"
-            );
+            bail!("parser: expected: number, string, (, true, false, null, identifier");
         }
     }
 
-    fn parse_number(&mut self, n: f64) -> Expression<'src> {
-        Expression::Literal(LiteralExpression { value: n.into() })
+    fn parse_number(&mut self, n: f64) -> Result<Expression<'src>> {
+        Ok(Expression::Literal(LiteralExpression { value: n.into() }))
     }
 
-    fn parse_string(&mut self, s: &'src str) -> Expression<'src> {
-        Expression::Literal(LiteralExpression { value: s.into() })
+    fn parse_string(&mut self, s: &'src str) -> Result<Expression<'src>> {
+        Ok(Expression::Literal(LiteralExpression { value: s.into() }))
     }
 
-    fn parse_grouping(&mut self) -> Expression<'src> {
+    fn parse_grouping(&mut self) -> Result<Expression<'src>> {
         let expr = self.parse_expression();
         self.consume(Token::RightParen);
         expr
     }
 
-    fn parse_struct_expression(&mut self) -> Expression<'src> {
+    fn parse_struct_expression(&mut self) -> Result<Expression<'src>> {
         let name = self.previous.unwrap().get_value();
 
         self.consume(Token::LeftBrace);
 
         let mut initializers = vec![];
         while !self.is_next(&[Token::RightBrace]) {
-            initializers.push(self.parse_struct_initializer());
+            initializers.push(self.parse_struct_initializer()?);
             self.consume(Token::Comma);
         }
 
-        Expression::Struct(StructExpression { name, initializers })
+        Ok(Expression::Struct(StructExpression { name, initializers }))
     }
 
-    fn parse_struct_initializer(&mut self) -> Expression<'src> {
-        let member = self.parse_expression();
+    fn parse_struct_initializer(&mut self) -> Result<Expression<'src>> {
+        let member = self.parse_expression()?;
         self.consume(Token::Colon);
-        let value = self.parse_expression();
+        let value = self.parse_expression()?;
 
-        Expression::StructInitializer(StructInitializerExpression {
+        Ok(Expression::StructInitializer(StructInitializerExpression {
             member: member.into(),
             value: value.into(),
-        })
+        }))
     }
 
-    fn parse_variable(&mut self) -> Expression<'src> {
+    fn parse_variable(&mut self) -> Result<Expression<'src>> {
         let value = self.previous.unwrap().get_value();
-        Expression::Variable(VariableExpression { value })
+        Ok(Expression::Variable(VariableExpression { value }))
     }
 
-    fn parse_literal(&mut self) -> Expression<'src> {
+    fn parse_literal(&mut self) -> Result<Expression<'src>> {
         let literal = match self.previous.unwrap() {
             Token::True => Literal::Bool(true),
             Token::False => Literal::Bool(false),
             Token::Null => Literal::Null,
             _ => unreachable!(),
         };
-        Expression::Literal(LiteralExpression { value: literal })
+        Ok(Expression::Literal(LiteralExpression { value: literal }))
     }
 }
 

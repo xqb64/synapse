@@ -16,7 +16,7 @@ macro_rules! bail_out {
     }};
     ($from:tt, $msg:expr, $($args:expr),*) => {{
         let mut result = format!("{} error: ", stringify!($from));
-        let mut parts = $msg.split("{}").peekable();
+        let mut parts = $msg.split("{}");
         let mut args_iter = vec![$($args.to_string()),*].into_iter();
 
         while let Some(part) = parts.next() {
