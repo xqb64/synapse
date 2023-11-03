@@ -38,7 +38,7 @@ fn main() -> Result<()> {
             let mut vm = VM::new(bytecode);
             vm.run()?;
         }
-        None => eprintln!("You must pass in a path."),
+        None => bail!("You must pass in a path."),
     }
 
     Ok(())
