@@ -176,23 +176,22 @@ pub struct VM<'src, 'bytecode> {
     ip: usize,
 }
 
-fn follow_ptr<'src>(target: &Object<'src>, deref_count: usize) -> *mut Object<'src> {
+fn follow_ptr<'src>(target: &Object<'src>, deref_count: usize) -> Result<*mut Object<'src>> {
     let mut current_ptr = match target {
         Object::Ptr(ptr) => *ptr,
-        _ => panic!("Expected a pointer object."),
+        _ => bail!("only pointers can be dereferenced"),
     };
 
     for _ in 0..deref_count - 1 {
-        unsafe {
-            if let Object::Ptr(ptr) = &*current_ptr {
-                current_ptr = *ptr;
-            } else {
-                panic!("Expected a pointer object after dereferencing.");
-            }
+        /* -1 because we dereferenced once already */
+        if let Object::Ptr(ptr) = unsafe { &*current_ptr } {
+            current_ptr = *ptr;
+        } else {
+            bail!("expected a pointer object after dereferencing");
         }
     }
 
-    current_ptr
+    Ok(current_ptr)
 }
 
 const STACK_MIN: usize = 1024;
@@ -394,7 +393,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     fn handle_op_deepsetderef(&mut self, idx: usize, deref_count: usize) -> Result<()> {
         let obj = pop!(self.stack);
         let target = self.stack.get_mut(adjust_idx!(self, idx)).unwrap();
-        let ptr = follow_ptr(target, deref_count);
+        let ptr = follow_ptr(target, deref_count)?;
 
         unsafe {
             *ptr = obj;
