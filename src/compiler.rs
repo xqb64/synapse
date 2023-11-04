@@ -8,6 +8,7 @@ use crate::parser::{
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 const CAPACITY_MIN: usize = 1024;
 
@@ -490,8 +491,6 @@ impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
         Ok(())
     }
 }
-
-use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum Opcode {

@@ -38,13 +38,9 @@ macro_rules! binop_relational {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        match $self.frame_ptrs.last() {
-            Some(&internal_obj) => {
-                let InternalObject::BytecodePtr(_, location) = internal_obj;
-                location + $index
-            }
-            None => 0 + $index,
-        }
+        let InternalObject::BytecodePtr(_, location) =
+            unsafe { $self.frame_ptrs.last().unwrap_unchecked() };
+        location + $index
     }};
 }
 
