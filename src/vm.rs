@@ -245,7 +245,7 @@ where
     }
 
     fn handle_op_deepset(&mut self, idx: usize) {
-        self.stack.data[adjust_idx!(self, idx)] = pop!(self.stack);
+        self.stack[adjust_idx!(self, idx)] = pop!(self.stack);
     }
 
     fn handle_op_deepsetderef(&mut self, idx: usize) -> Result<()> {
@@ -477,5 +477,19 @@ impl<'src> Stack<'src> {
 
     fn get(&self, n: usize) -> &Object<'src> {
         unsafe { self.data.get_unchecked(n) }
+    }
+}
+
+impl<'src> std::ops::Index<usize> for Stack<'src> {
+    type Output = Object<'src>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl<'src> std::ops::IndexMut<usize> for Stack<'src> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.data[index]
     }
 }
