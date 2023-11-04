@@ -347,12 +347,15 @@ impl<'src> Parser<'src> {
                     variable: name,
                     arguments,
                 });
-            } else if self.is_next(&[Token::Dot]) {
+            } else if self.is_next(&[Token::Dot, Token::Arrow]) {
+                let op = self.previous.unwrap();
                 let member = self.consume(Token::Identifier("")).unwrap().get_value();
                 expr = Expression::Get(GetExpression {
                     expr: expr.into(),
                     member,
-                })
+                    op,
+                });
+                println!("{:?}", expr);
             } else {
                 break;
             }
@@ -575,6 +578,7 @@ pub struct StructInitializerExpression<'src> {
 pub struct GetExpression<'src> {
     pub expr: Box<Expression<'src>>,
     pub member: &'src str,
+    pub op: Token<'src>,
 }
 
 #[derive(Debug, Clone)]

@@ -205,13 +205,14 @@ impl<'src> Codegen<'src> for ExpressionStatement<'src> {
 impl<'src> Codegen<'src> for ReturnStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.expression.codegen(compiler)?;
+
         let mut deepset_no = compiler.locals.len().saturating_sub(1);
         for _ in 0..compiler.locals.len() {
             compiler.emit_opcodes(&[Opcode::Deepset(deepset_no)]);
             deepset_no = deepset_no.saturating_sub(1);
         }
+
         compiler.emit_opcodes(&[Opcode::Ret]);
-        compiler.emit_stack_cleanup();
 
         Ok(())
     }
@@ -405,6 +406,19 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
 
                 compiler.emit_opcodes(&[Opcode::DerefSet]);
             }
+            Expression::Get(getexp) => {
+                getexp.expr.codegen(compiler)?;
+
+                if getexp.op == Token::Arrow {
+                    compiler.emit_opcodes(&[Opcode::Deref]);
+                }
+
+                self.rhs.codegen(compiler)?;
+
+                compiler.emit_opcodes(&[Opcode::Setattr(getexp.member.to_owned().into())]);
+
+                compiler.emit_opcodes(&[Opcode::Pop(1)]);
+            }
             _ => unimplemented!(),
         };
 
@@ -462,6 +476,15 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
                         compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
                     }
                 }
+                Expression::Get(getexp) => {
+                    getexp.expr.codegen(compiler)?;
+
+                    if getexp.op == Token::Arrow {
+                        compiler.emit_opcodes(&[Opcode::Deref]);
+                    }
+
+                    compiler.emit_opcodes(&[Opcode::GetattrPtr(getexp.member.to_owned().into())]);
+                }
                 _ => bail!("compiler: expected variable"),
             },
             Token::Star => {
@@ -478,6 +501,12 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
 impl<'src> Codegen<'src> for GetExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.expr.codegen(compiler)?;
+
+        if self.op == Token::Arrow {
+            println!("It was an arrow!");
+            compiler.emit_opcodes(&[Opcode::Deref]);
+        }
+
         compiler.emit_opcodes(&[Opcode::Getattr(self.member.to_string().into())]);
 
         Ok(())
@@ -544,6 +573,7 @@ pub enum Opcode {
     Deref,
     DerefSet,
     Getattr(Rc<String>),
+    GetattrPtr(Rc<String>),
     Setattr(Rc<String>),
     Strcat,
     Struct(Rc<String>),

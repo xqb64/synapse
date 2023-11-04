@@ -223,6 +223,15 @@ fn structs() {
 }
 
 #[test]
+fn linked_list() {
+    let (path, expected) = (
+        "tests/cases/linked_list.syn",
+        object_vec![3.14, false, "Hello, world!"],
+    );
+    run_test!(path, expected);
+}
+
+#[test]
 fn struct_error01() {
     let (path, expected) = (
         "tests/cases/struct_error01.syn",
