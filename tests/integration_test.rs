@@ -1,5 +1,6 @@
 use assert_cmd;
-use std::collections::VecDeque;
+use std::io::Write;
+use std::{collections::VecDeque, path::Path};
 use synapse::vm::Object;
 
 macro_rules! object_vec {
@@ -14,9 +15,9 @@ macro_rules! object_vec {
     }
 }
 
-fn fetch_stdout(path: &str) -> (VecDeque<String>, VecDeque<String>) {
+fn fetch_stdout(path: impl AsRef<Path>) -> (VecDeque<String>, VecDeque<String>) {
     let mut cmd = assert_cmd::Command::cargo_bin("synapse").unwrap();
-    let assert = cmd.arg(path).assert();
+    let assert = cmd.arg(path.as_ref()).assert();
     let output = assert.get_output();
     let stdout = String::from_utf8(output.stdout.clone()).unwrap();
     let stdout_split: VecDeque<String> = stdout
@@ -324,4 +325,46 @@ fn ptr02() {
 fn ptr03() {
     let (path, expected) = ("tests/cases/ptr03.syn", object_vec![3.0]);
     run_test!(path, expected);
+}
+
+#[test]
+fn logical() {
+    let test_cases = vec![
+        // Logical AND
+        (32, 64, 32, "&&", 64, "Run!"),
+        (32, 64, 16, "&&", 64, "Shouldn't run!"),
+        (32, 64, 32, "&&", 16, "Shouldn't run!"),
+        (32, 64, 128, "&&", 256, "Shouldn't run!"),
+        // Logical OR
+        (32, 64, 32, "||", 64, "Run!"),
+        (32, 64, 16, "||", 64, "Run!"),
+        (32, 64, 32, "||", 16, "Run!"),
+        (32, 64, 128, "||", 256, "Shouldn't run!"),
+    ];
+
+    for (a, b, if_a_equals, op, if_b_equals, expected) in test_cases {
+        let source = format!(
+            r#"
+            fn main() {{
+                x = {};
+                y = {};
+                if x == {} {} y == {} {{
+                  print "Run!";
+                }} else {{
+                  print "Shouldn't run!";
+                }}
+                return 0;
+            }}
+            "#,
+            a, b, if_a_equals, op, if_b_equals
+        );
+
+        let dir = std::env::temp_dir();
+        let input_file_path = dir.join("input.syn");
+        let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
+        println!("{}", source);
+        writeln!(file, "{}", source).expect("write test file failed");
+
+        run_test!(input_file_path.as_path(), object_vec!(expected));
+    }
 }

@@ -1,0 +1,10 @@
+fn main() {
+    x = 32;
+    y = 64;
+    if (x == 32 && y == 16) {
+        print "Run!";
+    } else {
+        print "Shouldn't run!";
+    }
+    return 0;
+}

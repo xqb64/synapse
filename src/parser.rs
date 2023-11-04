@@ -193,12 +193,36 @@ impl<'src> Parser<'src> {
     }
 
     fn assignment(&mut self) -> Result<Expression<'src>> {
-        let mut result = self.equality()?;
+        let mut result = self.or()?;
         while self.is_next(&[Token::Equal]) {
             result = Expression::Assign(AssignExpression {
                 lhs: result.into(),
+                rhs: self.or()?.into(),
+            });
+        }
+        Ok(result)
+    }
+
+    fn or(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.and()?;
+        while self.is_next(&[Token::DoublePipe]) {
+            result = Expression::Logical(LogicalExpression {
+                lhs: result.into(),
+                rhs: self.and()?.into(),
+                op: Token::DoublePipe,
+            });
+        }
+        Ok(result)
+    }
+
+    fn and(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.equality()?;
+        while self.is_next(&[Token::DoubleAmpersand]) {
+            result = Expression::Logical(LogicalExpression {
+                lhs: result.into(),
                 rhs: self.equality()?.into(),
-            })
+                op: Token::DoubleAmpersand,
+            });
         }
         Ok(result)
     }
@@ -353,6 +377,7 @@ impl<'src> Parser<'src> {
                 self.parse_variable()
             }
         } else {
+            println!("{:?}", self.current);
             bail!("parser: expected: number, string, (, true, false, null, identifier");
         }
     }
@@ -484,6 +509,7 @@ pub enum Expression<'src> {
     Binary(BinaryExpression<'src>),
     Call(CallExpression<'src>),
     Assign(AssignExpression<'src>),
+    Logical(LogicalExpression<'src>),
     Unary(UnaryExpression<'src>),
     Get(GetExpression<'src>),
     Struct(StructExpression<'src>),
@@ -517,6 +543,13 @@ pub struct CallExpression<'src> {
 pub struct AssignExpression<'src> {
     pub lhs: Box<Expression<'src>>,
     pub rhs: Box<Expression<'src>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LogicalExpression<'src> {
+    pub lhs: Box<Expression<'src>>,
+    pub rhs: Box<Expression<'src>>,
+    pub op: Token<'src>,
 }
 
 #[derive(Debug, Clone)]
