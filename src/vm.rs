@@ -3,126 +3,6 @@ use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Object<'src> {
-    Number(f64),
-    Bool(bool),
-    String(Rc<Cow<'src, str>>),
-    Struct(Rc<RefCell<StructObject<'src>>>),
-    Ptr(*mut Object<'src>),
-    Null,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct StructObject<'src> {
-    members: HashMap<&'src str, Object<'src>>,
-    name: &'src str,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum InternalObject {
-    BytecodePtr(usize, usize),
-}
-
-impl<'src> std::ops::Add for Object<'src> {
-    type Output = Result<Object<'src>>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => Ok((a + b).into()),
-            _ => bail!("vm: only numbers can be +"),
-        }
-    }
-}
-
-impl<'src> std::ops::Sub for Object<'src> {
-    type Output = Result<Object<'src>>;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => Ok((a - b).into()),
-            _ => bail!("vm: only numbers can be -"),
-        }
-    }
-}
-
-impl<'src> std::ops::Mul for Object<'src> {
-    type Output = Result<Object<'src>>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => Ok((a * b).into()),
-            _ => bail!("vm: only numbers can be *"),
-        }
-    }
-}
-
-impl<'src> std::ops::Div for Object<'src> {
-    type Output = Result<Object<'src>>;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Object::Number(a), Object::Number(b)) => Ok((a / b).into()),
-            _ => bail!("vm: only numbers can be /"),
-        }
-    }
-}
-
-impl<'src> std::ops::Not for Object<'src> {
-    type Output = Result<Object<'src>>;
-
-    fn not(self) -> Self::Output {
-        match self {
-            Object::Bool(b) => Ok((!b).into()),
-            _ => bail!("vm: only bools can be !"),
-        }
-    }
-}
-
-impl<'src> std::ops::Neg for Object<'src> {
-    type Output = Result<Object<'src>>;
-
-    fn neg(self) -> Self::Output {
-        match self {
-            Object::Number(b) => Ok((-b).into()),
-            _ => bail!("vm: only numbers can be -"),
-        }
-    }
-}
-
-impl<'src> std::cmp::PartialOrd for Object<'src> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match (self, other) {
-            (Object::Number(a), Object::Number(b)) => a.partial_cmp(b),
-            _ => None,
-        }
-    }
-}
-
-impl<'src> From<bool> for Object<'src> {
-    fn from(value: bool) -> Self {
-        Self::Bool(value)
-    }
-}
-
-impl<'src> From<f64> for Object<'src> {
-    fn from(value: f64) -> Self {
-        Self::Number(value)
-    }
-}
-
-impl<'src> From<String> for Object<'src> {
-    fn from(value: String) -> Self {
-        Self::String(Rc::new(Cow::Owned(value)))
-    }
-}
-
-impl<'src> From<&'src str> for Object<'src> {
-    fn from(value: &'src str) -> Self {
-        Self::String(Rc::new(Cow::Borrowed(value)))
-    }
-}
-
 macro_rules! pop {
     ($stack:expr) => {{
         $stack.pop()
@@ -168,71 +48,11 @@ macro_rules! adjust_idx {
     }};
 }
 
-#[derive(Debug)]
-struct Stack<'src> {
-    data: Box<[Object<'src>]>,
-    tos: usize,
-}
-
-impl<'src> Stack<'src> {
-    fn with_capacity(capacity: usize) -> Self {
-        let mut vec = Vec::with_capacity(capacity);
-
-        for _ in 0..capacity {
-            vec.push(Object::Null);
-        }
-
-        let data = vec.into_boxed_slice();
-
-        Self { data, tos: 0 }
-    }
-
-    fn push(&mut self, item: Object<'src>) {
-        self.data[self.tos] = item;
-        self.tos += 1;
-    }
-
-    fn pop(&mut self) -> Object<'src> {
-        self.tos -= 1;
-        std::mem::replace(&mut self.data[self.tos], Object::Null)
-    }
-
-    fn len(&self) -> usize {
-        self.tos
-    }
-
-    fn get_mut(&mut self, n: usize) -> &mut Object<'src> {
-        &mut self.data[n]
-    }
-
-    fn get(&self, n: usize) -> &Object<'src> {
-        &self.data[n]
-    }
-}
-
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode [Opcode],
     stack: Stack<'src>,
     frame_ptrs: Vec<InternalObject>,
     ip: usize,
-}
-
-fn follow_ptr<'src>(target: &Object<'src>, deref_count: usize) -> Result<*mut Object<'src>> {
-    let mut current_ptr = match target {
-        Object::Ptr(ptr) => *ptr,
-        _ => bail!("only pointers can be dereferenced"),
-    };
-
-    for _ in 0..deref_count - 1 {
-        /* -1 because we dereferenced once already */
-        if let Object::Ptr(ptr) = unsafe { &*current_ptr } {
-            current_ptr = *ptr;
-        } else {
-            bail!("expected a pointer object after dereferencing");
-        }
-    }
-
-    Ok(current_ptr)
 }
 
 const STACK_MIN: usize = 1024;
@@ -278,9 +98,7 @@ where
                 Opcode::Deepget(idx) => self.handle_op_deepget(*idx),
                 Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(*idx),
                 Opcode::Deepset(idx) => self.handle_op_deepset(*idx),
-                Opcode::DeepsetDeref(idx, deref_count) => {
-                    self.handle_op_deepsetderef(*idx, *deref_count)?
-                }
+                Opcode::DeepsetDeref(idx) => self.handle_op_deepsetderef(*idx)?,
                 Opcode::Deref => self.handle_op_deref()?,
                 Opcode::Getattr(member) => self.handle_op_getattr(member)?,
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
@@ -434,13 +252,17 @@ where
         self.stack.data[adjust_idx!(self, idx)] = pop!(self.stack);
     }
 
-    fn handle_op_deepsetderef(&mut self, idx: u32, deref_count: u32) -> Result<()> {
+    fn handle_op_deepsetderef(&mut self, idx: usize) -> Result<()> {
         let obj = pop!(self.stack);
-        let target = self.stack.get_mut(adjust_idx!(self, idx as usize));
-        let ptr = follow_ptr(target, deref_count as usize)?;
+        let target = self.stack.get_mut(adjust_idx!(self, idx));
+        let pointer = if let Object::Ptr(ptr) = target {
+            ptr
+        } else {
+            bail!("");
+        };
 
         unsafe {
-            *ptr = obj;
+            **pointer = obj;
         }
 
         Ok(())
@@ -474,7 +296,7 @@ where
         let value = pop!(self.stack);
         let structobj = pop!(self.stack);
         if let Object::Struct(s) = structobj {
-            s.borrow_mut().members.insert(member, value);
+            s.borrow_mut().members.insert(member.into(), value);
             self.stack.push(Object::Struct(s));
         }
     }
@@ -494,5 +316,170 @@ where
         for _ in 0..popcount {
             pop!(self.stack);
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Object<'src> {
+    Number(f64),
+    Bool(bool),
+    String(Rc<Cow<'src, str>>),
+    Struct(Rc<RefCell<StructObject<'src>>>),
+    Ptr(*mut Object<'src>),
+    Null,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructObject<'src> {
+    members: HashMap<Rc<str>, Object<'src>>,
+    name: &'src str,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum InternalObject {
+    BytecodePtr(usize, usize),
+}
+
+impl<'src> std::ops::Add for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => Ok((a + b).into()),
+            _ => bail!("vm: only numbers can be +"),
+        }
+    }
+}
+
+impl<'src> std::ops::Sub for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => Ok((a - b).into()),
+            _ => bail!("vm: only numbers can be -"),
+        }
+    }
+}
+
+impl<'src> std::ops::Mul for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => Ok((a * b).into()),
+            _ => bail!("vm: only numbers can be *"),
+        }
+    }
+}
+
+impl<'src> std::ops::Div for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => Ok((a / b).into()),
+            _ => bail!("vm: only numbers can be /"),
+        }
+    }
+}
+
+impl<'src> std::ops::Not for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Object::Bool(b) => Ok((!b).into()),
+            _ => bail!("vm: only bools can be !"),
+        }
+    }
+}
+
+impl<'src> std::ops::Neg for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Object::Number(b) => Ok((-b).into()),
+            _ => bail!("vm: only numbers can be -"),
+        }
+    }
+}
+
+impl<'src> std::cmp::PartialOrd for Object<'src> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Object::Number(a), Object::Number(b)) => a.partial_cmp(b),
+            _ => None,
+        }
+    }
+}
+
+impl<'src> From<bool> for Object<'src> {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl<'src> From<f64> for Object<'src> {
+    fn from(value: f64) -> Self {
+        Self::Number(value)
+    }
+}
+
+impl<'src> From<String> for Object<'src> {
+    fn from(value: String) -> Self {
+        Self::String(Rc::new(Cow::Owned(value)))
+    }
+}
+
+impl<'src> From<&'src str> for Object<'src> {
+    fn from(value: &'src str) -> Self {
+        Self::String(Rc::new(Cow::Borrowed(value)))
+    }
+}
+
+#[derive(Debug)]
+struct Stack<'src> {
+    data: Box<[Object<'src>]>,
+    tos: usize,
+}
+
+impl<'src> Stack<'src> {
+    fn with_capacity(capacity: usize) -> Self {
+        let mut vec = Vec::with_capacity(capacity);
+
+        for _ in 0..capacity {
+            vec.push(Object::Null);
+        }
+
+        let data = vec.into_boxed_slice();
+
+        Self { data, tos: 0 }
+    }
+
+    fn push(&mut self, item: Object<'src>) {
+        self.data[self.tos] = item;
+        self.tos += 1;
+    }
+
+    fn pop(&mut self) -> Object<'src> {
+        self.tos -= 1;
+        std::mem::replace(
+            unsafe { self.data.get_unchecked_mut(self.tos) },
+            Object::Null,
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.tos
+    }
+
+    fn get_mut(&mut self, n: usize) -> &mut Object<'src> {
+        unsafe { self.data.get_unchecked_mut(n) }
+    }
+
+    fn get(&self, n: usize) -> &Object<'src> {
+        unsafe { self.data.get_unchecked(n) }
     }
 }

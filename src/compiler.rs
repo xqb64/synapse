@@ -8,7 +8,6 @@ use crate::parser::{
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
 use std::collections::HashMap;
-use std::rc::Rc;
 
 const CAPACITY_MIN: usize = 1024;
 
@@ -387,11 +386,9 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                 self.rhs.codegen(compiler)?;
 
                 let mut current = self.lhs.clone();
-                let mut deref_count = 0;
                 while match *current.clone() {
                     Expression::Unary(u) => {
                         current = u.expr;
-                        deref_count += 1;
                         true
                     }
                     _ => false,
@@ -400,11 +397,11 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                 if let Expression::Variable(var) = *current.clone() {
                     let local = compiler.resolve_local(var.value);
                     if let Some(idx) = local {
-                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx as u32, deref_count)]);
+                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx)]);
                     } else {
                         compiler.locals.push(var.value);
                         let idx = compiler.resolve_local(var.value).unwrap();
-                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx as u32, deref_count)]);
+                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx)]);
                     }
                 } else {
                     bail!("compiler: tried to deref a non-var");
@@ -494,6 +491,8 @@ impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
     }
 }
 
+use std::rc::Rc;
+
 #[derive(Debug, Clone)]
 pub enum Opcode {
     Print,
@@ -517,7 +516,7 @@ pub enum Opcode {
     Deepget(usize),
     DeepgetPtr(usize),
     Deepset(usize),
-    DeepsetDeref(u32, u32),
+    DeepsetDeref(usize),
     Deref,
     Getattr(Rc<String>),
     Setattr(Rc<String>),

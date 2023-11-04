@@ -1,0 +1,12 @@
+fn f(x) {
+    **x = 3;
+    return 0;
+}
+
+fn main() {
+    spam = 0;
+    egg = &spam;
+    f(&egg);
+    print spam;
+    return 0;
+}
