@@ -166,6 +166,38 @@ fn _while_pop() {
 }
 
 #[test]
+fn _break() {
+    let (path, expected) = ("tests/cases/break.syn", object_vec![0.0, 1.0, 2.0, 3.0]);
+    run_test!(path, expected);
+}
+
+#[test]
+fn break_complex() {
+    let (path, expected) = (
+        "tests/cases/break_complex.syn",
+        object_vec![
+            1.0,
+            "Hello, world!",
+            "Hello, world!",
+            "Hello, world!",
+            "Hello, world!",
+            "Hello, world!",
+            3.0
+        ],
+    );
+    run_test!(path, expected);
+}
+
+#[test]
+fn _continue() {
+    let (path, expected) = (
+        "tests/cases/continue.syn",
+        object_vec![0.0, 1.0, 2.0, 3.0, 4.0],
+    );
+    run_test!(path, expected);
+}
+
+#[test]
 fn strcat() {
     let (path, expected) = (
         "tests/cases/strcat.syn",
