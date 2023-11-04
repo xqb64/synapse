@@ -97,6 +97,7 @@ where
                 Opcode::Deref => self.handle_op_deref()?,
                 Opcode::DerefSet => self.handle_op_derefset()?,
                 Opcode::Getattr(member) => self.handle_op_getattr(member)?,
+                Opcode::GetattrPtr(member) => self.handle_op_getattrptr(member)?,
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
                 Opcode::Strcat => self.handle_op_strcat()?,
@@ -279,6 +280,21 @@ where
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow().members.get(member) {
                 Some(m) => self.stack.push(m.clone()),
+                None => bail!(
+                    "vm: struct '{}' has no member '{}'",
+                    obj.borrow().name,
+                    member
+                ),
+            };
+        }
+
+        Ok(())
+    }
+
+    fn handle_op_getattrptr(&mut self, member: &str) -> Result<()> {
+        if let Object::Struct(obj) = pop!(self.stack) {
+            match obj.borrow_mut().members.get_mut(member) {
+                Some(m) => self.stack.push(Object::Ptr(m as *mut Object<'src>)),
                 None => bail!(
                     "vm: struct '{}' has no member '{}'",
                     obj.borrow().name,
