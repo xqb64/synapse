@@ -383,9 +383,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                     }
                 }
             }
-            Expression::Unary(_) => {
-                self.rhs.codegen(compiler)?;
-
+            Expression::Unary(unary) => {
                 let mut current = self.lhs.clone();
                 while match *current.clone() {
                     Expression::Unary(u) => {
@@ -395,18 +393,11 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                     _ => false,
                 } {}
 
-                if let Expression::Variable(var) = *current.clone() {
-                    let local = compiler.resolve_local(var.value);
-                    if let Some(idx) = local {
-                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx)]);
-                    } else {
-                        compiler.locals.push(var.value);
-                        let idx = compiler.resolve_local(var.value).unwrap();
-                        compiler.emit_opcodes(&[Opcode::DeepsetDeref(idx)]);
-                    }
-                } else {
-                    bail!("compiler: tried to deref a non-var");
-                }
+                unary.expr.codegen(compiler)?;
+
+                self.rhs.codegen(compiler)?;
+
+                compiler.emit_opcodes(&[Opcode::DerefSet]);
             }
             _ => unimplemented!(),
         };
@@ -515,8 +506,8 @@ pub enum Opcode {
     Deepget(usize),
     DeepgetPtr(usize),
     Deepset(usize),
-    DeepsetDeref(usize),
     Deref,
+    DerefSet,
     Getattr(Rc<String>),
     Setattr(Rc<String>),
     Strcat,

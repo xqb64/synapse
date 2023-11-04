@@ -313,3 +313,15 @@ fn ptr() {
     let (path, expected) = ("tests/cases/ptr.syn", object_vec![3.0]);
     run_test!(path, expected);
 }
+
+#[test]
+fn ptr02() {
+    let (path, expected) = ("tests/cases/ptr02.syn", object_vec![3.0]);
+    run_test!(path, expected);
+}
+
+#[test]
+fn ptr03() {
+    let (path, expected) = ("tests/cases/ptr03.syn", object_vec![3.0]);
+    run_test!(path, expected);
+}

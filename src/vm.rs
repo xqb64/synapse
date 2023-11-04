@@ -94,8 +94,8 @@ where
                 Opcode::Deepget(idx) => self.handle_op_deepget(*idx),
                 Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(*idx),
                 Opcode::Deepset(idx) => self.handle_op_deepset(*idx),
-                Opcode::DeepsetDeref(idx) => self.handle_op_deepsetderef(*idx)?,
                 Opcode::Deref => self.handle_op_deref()?,
+                Opcode::DerefSet => self.handle_op_derefset()?,
                 Opcode::Getattr(member) => self.handle_op_getattr(member)?,
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
@@ -248,21 +248,21 @@ where
         self.stack[adjust_idx!(self, idx)] = pop!(self.stack);
     }
 
-    fn handle_op_deepsetderef(&mut self, idx: usize) -> Result<()> {
-        let obj = pop!(self.stack);
-        let target = self.stack.get(adjust_idx!(self, idx));
-        if let Object::Ptr(ptr) = target {
-            unsafe {
-                **ptr = obj;
-            }
+    fn handle_op_deref(&mut self) -> Result<()> {
+        match pop!(self.stack) {
+            Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
+            _ => bail!("vm: tried to deref a non-ptr"),
         }
 
         Ok(())
     }
 
-    fn handle_op_deref(&mut self) -> Result<()> {
+    fn handle_op_derefset(&mut self) -> Result<()> {
+        let item = pop!(self.stack);
         match pop!(self.stack) {
-            Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
+            Object::Ptr(ptr) => {
+                unsafe { *ptr = item };
+            }
             _ => bail!("vm: tried to deref a non-ptr"),
         }
 
