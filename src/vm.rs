@@ -9,6 +9,7 @@ pub enum Object<'src> {
     Bool(bool),
     String(Rc<Cow<'src, str>>),
     Struct(Rc<RefCell<StructObject<'src>>>),
+    Ptr(*mut Object<'src>),
     Null,
 }
 
@@ -124,18 +125,18 @@ impl<'src> From<&'src str> for Object<'src> {
 
 macro_rules! pop {
     ($stack:expr) => {{
-        unsafe { $stack.pop().unwrap_unchecked() }
+        $stack.pop()
     }};
 }
 
 macro_rules! binop_arithmetic {
-    ($stack:expr, $op:tt) => {
+    ($self:tt, $op:tt) => {
         {
-            let b = pop!($stack);
-            let a = pop!($stack);
+            let b = pop!($self.stack);
+            let a = pop!($self.stack);
             let res = (a $op b);
             match res {
-                Ok(r) => $stack.push(r.into()),
+                Ok(r) => $self.stack.push(r.into()),
                 Err(e) => bail!(e),
             }
         }
@@ -143,14 +144,14 @@ macro_rules! binop_arithmetic {
 }
 
 macro_rules! binop_relational {
-    ($stack:expr, $op:tt) => {
+    ($self:tt, $op:tt) => {
         {
-            let b = pop!($stack);
-            let a = pop!($stack);
+            let b = pop!($self.stack);
+            let a = pop!($self.stack);
             if std::mem::discriminant(&a) != std::mem::discriminant(&b) {
                 bail!("vm: only numbers can be: <, >, <=, >=");
             }
-            $stack.push((a $op b).into());
+            $self.stack.push((a $op b).into());
         }
     };
 }
@@ -167,20 +168,83 @@ macro_rules! adjust_idx {
     }};
 }
 
+#[derive(Debug)]
+struct Stack<'src> {
+    data: Box<[Object<'src>]>,
+    tos: usize,
+}
+
+impl<'src> Stack<'src> {
+    fn with_capacity(capacity: usize) -> Self {
+        let mut vec = Vec::with_capacity(capacity);
+
+        for _ in 0..capacity {
+            vec.push(Object::Null);
+        }
+
+        let data = vec.into_boxed_slice();
+
+        Self { data, tos: 0 }
+    }
+
+    fn push(&mut self, item: Object<'src>) {
+        self.data[self.tos] = item;
+        self.tos += 1;
+    }
+
+    fn pop(&mut self) -> Object<'src> {
+        self.tos -= 1;
+        std::mem::replace(&mut self.data[self.tos], Object::Null)
+    }
+
+    fn len(&self) -> usize {
+        self.tos
+    }
+
+    fn get_mut(&mut self, n: usize) -> &mut Object<'src> {
+        &mut self.data[n]
+    }
+
+    fn get(&self, n: usize) -> &Object<'src> {
+        &self.data[n]
+    }
+}
+
 pub struct VM<'src, 'bytecode> {
-    bytecode: &'bytecode [Opcode<'src>],
-    stack: Vec<Object<'src>>,
+    bytecode: &'bytecode [Opcode],
+    stack: Stack<'src>,
     frame_ptrs: Vec<InternalObject>,
     ip: usize,
 }
 
+fn follow_ptr<'src>(target: &Object<'src>, deref_count: usize) -> Result<*mut Object<'src>> {
+    let mut current_ptr = match target {
+        Object::Ptr(ptr) => *ptr,
+        _ => bail!("only pointers can be dereferenced"),
+    };
+
+    for _ in 0..deref_count - 1 {
+        /* -1 because we dereferenced once already */
+        if let Object::Ptr(ptr) = unsafe { &*current_ptr } {
+            current_ptr = *ptr;
+        } else {
+            bail!("expected a pointer object after dereferencing");
+        }
+    }
+
+    Ok(current_ptr)
+}
+
 const STACK_MIN: usize = 1024;
 
-impl<'src, 'bytecode> VM<'src, 'bytecode> {
-    pub fn new(bytecode: &'bytecode [Opcode<'src>]) -> VM<'src, 'bytecode> {
+impl<'src, 'bytecode> VM<'src, 'bytecode>
+where
+    'bytecode: 'src,
+{
+    pub fn new(bytecode: &'bytecode [Opcode]) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
-            stack: Vec::with_capacity(STACK_MIN),
+            stack: Stack::with_capacity(STACK_MIN),
             frame_ptrs: Vec::with_capacity(STACK_MIN),
             ip: 0,
         }
@@ -192,8 +256,8 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                 println!("current instruction: {:?}", self.bytecode[self.ip]);
             }
 
-            match unsafe { *self.bytecode.get_unchecked(self.ip) } {
-                Opcode::Const(n) => self.handle_op_const(n),
+            match unsafe { self.bytecode.get_unchecked(self.ip) } {
+                Opcode::Const(n) => self.handle_op_const(*n),
                 Opcode::Str(s) => self.handle_op_str(s),
                 Opcode::Print => self.handle_op_print(),
                 Opcode::Add => self.handle_op_add()?,
@@ -207,22 +271,27 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                 Opcode::Eq => self.handle_op_eq(),
                 Opcode::Lt => self.handle_op_lt()?,
                 Opcode::Gt => self.handle_op_gt()?,
-                Opcode::Jmp(addr) => self.handle_op_jmp(addr),
-                Opcode::Jz(addr) => self.handle_op_jz(addr),
-                Opcode::Call(n) => self.handle_op_call(n),
+                Opcode::Jmp(addr) => self.handle_op_jmp(*addr),
+                Opcode::Jz(addr) => self.handle_op_jz(*addr),
+                Opcode::Call(n) => self.handle_op_call(*n),
                 Opcode::Ret => self.handle_op_ret(),
-                Opcode::Deepget(idx) => self.handle_op_deepget(idx),
-                Opcode::Deepset(idx) => self.handle_op_deepset(idx),
+                Opcode::Deepget(idx) => self.handle_op_deepget(*idx),
+                Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(*idx),
+                Opcode::Deepset(idx) => self.handle_op_deepset(*idx),
+                Opcode::DeepsetDeref(idx, deref_count) => {
+                    self.handle_op_deepsetderef(*idx, *deref_count)?
+                }
+                Opcode::Deref => self.handle_op_deref()?,
                 Opcode::Getattr(member) => self.handle_op_getattr(member)?,
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
                 Opcode::Strcat => self.handle_op_strcat()?,
-                Opcode::Pop => self.handle_op_pop(),
+                Opcode::Pop(popcount) => self.handle_op_pop(*popcount),
                 Opcode::Halt => break Ok(()),
             }
 
             if cfg!(debug_assertions) {
-                println!("stack: {:?}", self.stack);
+                println!("stack: {:?}", &self.stack.data[0..self.stack.tos]);
             }
 
             self.ip += 1;
@@ -263,25 +332,25 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_add(&mut self) -> Result<()> {
-        binop_arithmetic!(self.stack, +);
+        binop_arithmetic!(self, +);
 
         Ok(())
     }
 
     fn handle_op_sub(&mut self) -> Result<()> {
-        binop_arithmetic!(self.stack, -);
+        binop_arithmetic!(self, -);
 
         Ok(())
     }
 
     fn handle_op_mul(&mut self) -> Result<()> {
-        binop_arithmetic!(self.stack, *);
+        binop_arithmetic!(self, *);
 
         Ok(())
     }
 
     fn handle_op_div(&mut self) -> Result<()> {
-        binop_arithmetic!(self.stack, /);
+        binop_arithmetic!(self, /);
 
         Ok(())
     }
@@ -315,13 +384,13 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_lt(&mut self) -> Result<()> {
-        binop_relational!(self.stack, <);
+        binop_relational!(self, <);
 
         Ok(())
     }
 
     fn handle_op_gt(&mut self) -> Result<()> {
-        binop_relational!(self.stack, >);
+        binop_relational!(self, >);
 
         Ok(())
     }
@@ -345,22 +414,49 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
     }
 
     fn handle_op_ret(&mut self) {
-        let retaddr = pop!(self.frame_ptrs);
+        let retaddr = unsafe { self.frame_ptrs.pop().unwrap_unchecked() };
         let InternalObject::BytecodePtr(ptr, _) = retaddr;
         self.ip = ptr;
     }
 
     fn handle_op_deepget(&mut self, idx: usize) {
-        let item = unsafe { self.stack.get_unchecked(adjust_idx!(self, idx)) }.clone();
-        self.stack.push(item);
+        let item = self.stack.get(adjust_idx!(self, idx));
+        self.stack.push(item.clone());
+    }
+
+    fn handle_op_deepgetptr(&mut self, idx: usize) {
+        let item = self.stack.get_mut(adjust_idx!(self, idx));
+        let ptr = item as *mut Object<'_>;
+        self.stack.push(Object::Ptr(ptr));
     }
 
     fn handle_op_deepset(&mut self, idx: usize) {
-        self.stack.swap_remove(adjust_idx!(self, idx));
+        self.stack.data[adjust_idx!(self, idx)] = pop!(self.stack);
+    }
+
+    fn handle_op_deepsetderef(&mut self, idx: u32, deref_count: u32) -> Result<()> {
+        let obj = pop!(self.stack);
+        let target = self.stack.get_mut(adjust_idx!(self, idx as usize));
+        let ptr = follow_ptr(target, deref_count as usize)?;
+
+        unsafe {
+            *ptr = obj;
+        }
+
+        Ok(())
+    }
+
+    fn handle_op_deref(&mut self) -> Result<()> {
+        match pop!(self.stack) {
+            Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
+            _ => bail!("vm: tried to deref a non-ptr"),
+        }
+
+        Ok(())
     }
 
     fn handle_op_getattr(&mut self, member: &str) -> Result<()> {
-        if let Some(Object::Struct(obj)) = self.stack.pop() {
+        if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow().members.get(member) {
                 Some(m) => self.stack.push(m.clone()),
                 None => bail!(
@@ -368,7 +464,7 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
                     obj.borrow().name,
                     member
                 ),
-            }
+            };
         }
 
         Ok(())
@@ -394,7 +490,9 @@ impl<'src, 'bytecode> VM<'src, 'bytecode> {
         self.stack.push(structobj);
     }
 
-    fn handle_op_pop(&mut self) {
-        pop!(self.stack);
+    fn handle_op_pop(&mut self, popcount: usize) {
+        for _ in 0..popcount {
+            pop!(self.stack);
+        }
     }
 }

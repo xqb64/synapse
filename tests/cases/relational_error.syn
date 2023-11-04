@@ -1,3 +1,4 @@
 fn main() {
     print 1 < null;
+    return 0;
 }

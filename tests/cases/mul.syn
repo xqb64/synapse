@@ -1,3 +1,4 @@
 fn main() {
     print 2 * 3 * 6 * 10;
+    return 0;
 }

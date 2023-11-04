@@ -5,4 +5,5 @@ fn main() {
         print x;
         x = x - 1;
     }
+    return 0;
 }

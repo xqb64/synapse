@@ -1,0 +1,11 @@
+fn f(z) {
+    *z = 3;
+    return 0;
+}
+
+fn main() {
+    x = "hello, world!";
+    f(&x);
+    print x;
+    return 0;
+}

@@ -1,4 +1,5 @@
 fn main() {
     x = "Hello, world!";
     print !x;
+    return 0;
 }

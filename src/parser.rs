@@ -289,7 +289,7 @@ impl<'src> Parser<'src> {
     }
 
     fn unary(&mut self) -> Result<Expression<'src>> {
-        if self.is_next(&[Token::Minus, Token::Bang]) {
+        if self.is_next(&[Token::Minus, Token::Bang, Token::Ampersand, Token::Star]) {
             let op = self.previous.unwrap();
             let expr = self.unary()?;
             return Ok(Expression::Unary(UnaryExpression {
@@ -477,7 +477,7 @@ pub struct ExpressionStatement<'src> {
     pub expression: Expression<'src>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression<'src> {
     Literal(LiteralExpression<'src>),
     Variable(VariableExpression<'src>),
@@ -490,60 +490,60 @@ pub enum Expression<'src> {
     StructInitializer(StructInitializerExpression<'src>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LiteralExpression<'src> {
     pub value: Literal<'src>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VariableExpression<'src> {
     pub value: &'src str,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinaryExpression<'src> {
     pub kind: BinaryExpressionKind,
     pub lhs: Box<Expression<'src>>,
     pub rhs: Box<Expression<'src>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CallExpression<'src> {
     pub variable: &'src str,
     pub arguments: Vec<Expression<'src>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssignExpression<'src> {
     pub lhs: Box<Expression<'src>>,
     pub rhs: Box<Expression<'src>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnaryExpression<'src> {
     pub expr: Box<Expression<'src>>,
     pub op: Token<'src>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructExpression<'src> {
     pub name: &'src str,
     pub initializers: Vec<Expression<'src>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructInitializerExpression<'src> {
     pub member: Box<Expression<'src>>,
     pub value: Box<Expression<'src>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetExpression<'src> {
     pub expr: Box<Expression<'src>>,
     pub member: &'src str,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryExpressionKind {
     Add,
     Sub,
@@ -557,7 +557,7 @@ pub enum BinaryExpressionKind {
     Strcat,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal<'src> {
     Num(f64),
     String(&'src str),
