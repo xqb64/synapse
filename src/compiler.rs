@@ -517,9 +517,7 @@ pub enum Opcode {
 }
 
 trait Codegen<'src> {
-    fn codegen(&self, _compiler: &mut Compiler<'src>) -> Result<()> {
-        Ok(())
-    }
+    fn codegen(&self, _compiler: &mut Compiler<'src>) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
