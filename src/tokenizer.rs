@@ -27,6 +27,12 @@ pub enum Token<'src> {
     #[token("while")]
     While,
 
+    #[token("break")]
+    Break,
+
+    #[token("continue")]
+    Continue,
+
     #[token("struct")]
     Struct,
 

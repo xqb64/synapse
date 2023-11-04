@@ -79,6 +79,10 @@ impl<'src> Parser<'src> {
             self.parse_if_statement()
         } else if self.is_next(&[Token::While]) {
             self.parse_while_statement()
+        } else if self.is_next(&[Token::Break]) {
+            self.parse_break_statement()
+        } else if self.is_next(&[Token::Continue]) {
+            self.parse_continue_statement()
         } else if self.is_next(&[Token::LeftBrace]) {
             self.parse_block_statement()
         } else {
@@ -142,6 +146,16 @@ impl<'src> Parser<'src> {
             condition,
             body: body.into(),
         }))
+    }
+
+    fn parse_break_statement(&mut self) -> Result<Statement<'src>> {
+        self.consume(Token::Semicolon);
+        Ok(Statement::Break(BreakStatement {}))
+    }
+
+    fn parse_continue_statement(&mut self) -> Result<Statement<'src>> {
+        self.consume(Token::Semicolon);
+        Ok(Statement::Continue(ContinueStatement {}))
     }
 
     fn parse_struct_statement(&mut self) -> Result<Statement<'src>> {
@@ -454,6 +468,8 @@ pub enum Statement<'src> {
     Return(ReturnStatement<'src>),
     If(IfStatement<'src>),
     While(WhileStatement<'src>),
+    Break(BreakStatement),
+    Continue(ContinueStatement),
     Struct(StructStatement<'src>),
     Block(BlockStatement<'src>),
     Expression(ExpressionStatement<'src>),
@@ -489,6 +505,12 @@ pub struct WhileStatement<'src> {
     pub condition: Expression<'src>,
     pub body: Box<Statement<'src>>,
 }
+
+#[derive(Debug)]
+pub struct BreakStatement;
+
+#[derive(Debug)]
+pub struct ContinueStatement;
 
 #[derive(Debug)]
 pub struct StructStatement<'src> {

@@ -1,8 +1,8 @@
 use crate::parser::{
-    AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
-    Expression, ExpressionStatement, FnStatement, GetExpression, IfStatement, Literal,
-    LiteralExpression, LogicalExpression, PrintStatement, ReturnStatement, Statement,
-    StructExpression, StructInitializerExpression, StructStatement, UnaryExpression,
+    AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, BreakStatement,
+    CallExpression, ContinueStatement, Expression, ExpressionStatement, FnStatement, GetExpression,
+    IfStatement, Literal, LiteralExpression, LogicalExpression, PrintStatement, ReturnStatement,
+    Statement, StructExpression, StructInitializerExpression, StructStatement, UnaryExpression,
     VariableExpression, WhileStatement,
 };
 use crate::tokenizer::Token;
@@ -16,8 +16,10 @@ pub struct Compiler<'src> {
     bytecode: Vec<Opcode>,
     functions: HashMap<&'src str, Function<'src>>,
     locals: Vec<&'src str>,
-    structs: HashMap<&'src str, Vec<&'src str>>,
     pops: Vec<usize>,
+    structs: HashMap<&'src str, Vec<&'src str>>,
+    breaks: Vec<usize>,
+    loop_starts: Vec<usize>,
 }
 
 impl Default for Compiler<'_> {
@@ -34,6 +36,8 @@ impl<'src> Compiler<'src> {
             locals: Vec::with_capacity(CAPACITY_MIN),
             structs: HashMap::with_capacity(CAPACITY_MIN),
             pops: Vec::with_capacity(CAPACITY_MIN),
+            breaks: Vec::with_capacity(CAPACITY_MIN),
+            loop_starts: Vec::with_capacity(CAPACITY_MIN),
         }
     }
 
@@ -92,6 +96,8 @@ impl<'src> Codegen<'src> for Statement<'src> {
             Statement::Return(return_statement) => return_statement.codegen(compiler)?,
             Statement::If(if_statement) => if_statement.codegen(compiler)?,
             Statement::While(while_statement) => while_statement.codegen(compiler)?,
+            Statement::Break(break_statement) => break_statement.codegen(compiler)?,
+            Statement::Continue(continue_statement) => continue_statement.codegen(compiler)?,
             Statement::Expression(expr_statement) => expr_statement.codegen(compiler)?,
             Statement::Block(block_statement) => block_statement.codegen(compiler)?,
             Statement::Struct(struct_statement) => struct_statement.codegen(compiler)?,
@@ -176,6 +182,9 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let loop_start = compiler.bytecode.len() - 1;
 
+        compiler.loop_starts.push(loop_start);
+        let break_count = compiler.breaks.len();
+
         self.condition.codegen(compiler)?;
 
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
@@ -183,7 +192,47 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
         self.body.codegen(compiler)?;
 
         compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
+
+        let pop = compiler.breaks.len() - break_count;
+        for _ in 0..pop {
+            let break_jump = compiler.breaks.pop().unwrap();
+            compiler.patch_jmp(break_jump);
+        }
+
+        compiler.loop_starts.pop();
+
         compiler.patch_jmp(jz_idx);
+
+        Ok(())
+    }
+}
+
+impl<'src> Codegen<'src> for BreakStatement {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        if !compiler.loop_starts.is_empty() {
+            compiler.emit_stack_cleanup();
+
+            let break_jump = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+            compiler.breaks.push(break_jump);
+        } else {
+            bail!("compiler: break outside a loop");
+        }
+
+        Ok(())
+    }
+}
+
+impl<'src> Codegen<'src> for ContinueStatement {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        if !compiler.loop_starts.is_empty() {
+            let loop_start = compiler.loop_starts.last().copied().unwrap();
+
+            compiler.emit_stack_cleanup();
+
+            compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
+        } else {
+            bail!("compiler: continue outside a loop");
+        }
 
         Ok(())
     }
