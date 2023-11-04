@@ -38,7 +38,7 @@ macro_rules! binop_relational {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        let InternalObject::BytecodePtr(_, location) =
+        let BytecodePtr { ptr: _, location } =
             unsafe { $self.frame_ptrs.last().unwrap_unchecked() };
         location + $index
     }};
@@ -47,7 +47,7 @@ macro_rules! adjust_idx {
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode [Opcode],
     stack: Stack<'src>,
-    frame_ptrs: Vec<InternalObject>,
+    frame_ptrs: Vec<BytecodePtr>,
     ip: usize,
 }
 
@@ -221,15 +221,15 @@ where
     }
 
     fn handle_op_call(&mut self, n: usize) {
-        self.frame_ptrs.push(InternalObject::BytecodePtr(
-            self.ip + 1,
-            self.stack.len() - n,
-        ));
+        self.frame_ptrs.push(BytecodePtr {
+            ptr: self.ip + 1,
+            location: self.stack.len() - n,
+        });
     }
 
     fn handle_op_ret(&mut self) {
         let retaddr = unsafe { self.frame_ptrs.pop().unwrap_unchecked() };
-        let InternalObject::BytecodePtr(ptr, _) = retaddr;
+        let BytecodePtr { ptr, location: _ } = retaddr;
         self.ip = ptr;
     }
 
@@ -331,9 +331,10 @@ pub struct StructObject<'src> {
     name: &'src str,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum InternalObject {
-    BytecodePtr(usize, usize),
+#[derive(Debug, Copy, Clone)]
+pub struct BytecodePtr {
+    pub ptr: usize,
+    pub location: usize,
 }
 
 impl<'src> std::ops::Add for Object<'src> {
