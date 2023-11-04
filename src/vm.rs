@@ -250,15 +250,11 @@ where
 
     fn handle_op_deepsetderef(&mut self, idx: usize) -> Result<()> {
         let obj = pop!(self.stack);
-        let target = self.stack.get_mut(adjust_idx!(self, idx));
-        let pointer = if let Object::Ptr(ptr) = target {
-            ptr
-        } else {
-            bail!("");
-        };
-
-        unsafe {
-            **pointer = obj;
+        let target = self.stack.get(adjust_idx!(self, idx));
+        if let Object::Ptr(ptr) = target {
+            unsafe {
+                **ptr = obj;
+            }
         }
 
         Ok(())
