@@ -38,8 +38,7 @@ macro_rules! binop_relational {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        let BytecodePtr { ptr: _, location } =
-            unsafe { $self.frame_ptrs.last().unwrap_unchecked() };
+        let BytecodePtr { ptr: _, location } = $self.frame_ptrs.last().unwrap();
         location + $index
     }};
 }
@@ -228,7 +227,7 @@ where
     }
 
     fn handle_op_ret(&mut self) {
-        let retaddr = unsafe { self.frame_ptrs.pop().unwrap_unchecked() };
+        let retaddr = self.frame_ptrs.pop().unwrap();
         let BytecodePtr { ptr, location: _ } = retaddr;
         self.ip = ptr;
     }
