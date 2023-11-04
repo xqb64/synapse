@@ -294,11 +294,12 @@ impl<'src> Parser<'src> {
 
     fn factor(&mut self) -> Result<Expression<'src>> {
         let mut result = self.unary()?;
-        while self.is_next(&[Token::Star, Token::Slash]) {
+        while self.is_next(&[Token::Star, Token::Slash, Token::Percent]) {
             let kind = match self.previous {
                 Some(token) => match token {
                     Token::Star => BinaryExpressionKind::Mul,
                     Token::Slash => BinaryExpressionKind::Div,
+                    Token::Percent => BinaryExpressionKind::Mod,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -582,6 +583,7 @@ pub enum BinaryExpressionKind {
     Sub,
     Mul,
     Div,
+    Mod,
     Equality(bool), /* negation */
     Less,
     Greater,

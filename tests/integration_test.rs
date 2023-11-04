@@ -136,6 +136,18 @@ fn fib10() {
 }
 
 #[test]
+fn fizzbuzz() {
+    let (path, expected) = (
+        "tests/cases/fizzbuzz.syn",
+        object_vec![
+            "fizzbuzz", 1.0, 2.0, "fizz", 4.0, "buzz", "fizz", 7.0, 8.0, "fizz", "buzz", 11.0,
+            "fizz", 13.0, 14.0, "fizzbuzz", 16.0, 17.0, "fizz", 19.0
+        ],
+    );
+    run_test!(path, expected);
+}
+
+#[test]
 fn _while() {
     let (path, expected) = (
         "tests/cases/while.syn",

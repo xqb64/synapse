@@ -79,6 +79,7 @@ where
                 Opcode::Sub => self.handle_op_sub()?,
                 Opcode::Mul => self.handle_op_mul()?,
                 Opcode::Div => self.handle_op_div()?,
+                Opcode::Mod => self.handle_op_mod()?,
                 Opcode::False => self.handle_op_false(),
                 Opcode::Not => self.handle_op_not()?,
                 Opcode::Neg => self.handle_op_neg()?,
@@ -164,6 +165,12 @@ where
 
     fn handle_op_div(&mut self) -> Result<()> {
         binop_arithmetic!(self, /);
+
+        Ok(())
+    }
+
+    fn handle_op_mod(&mut self) -> Result<()> {
+        binop_arithmetic!(self, %);
 
         Ok(())
     }
@@ -372,6 +379,17 @@ impl<'src> std::ops::Div for Object<'src> {
         match (self, rhs) {
             (Object::Number(a), Object::Number(b)) => Ok((a / b).into()),
             _ => bail!("vm: only numbers can be /"),
+        }
+    }
+}
+
+impl<'src> std::ops::Rem for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => Ok((a % b).into()),
+            _ => bail!("vm: only numbers can be %"),
         }
     }
 }

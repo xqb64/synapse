@@ -102,6 +102,9 @@ pub enum Token<'src> {
     #[token(",")]
     Comma,
 
+    #[token("%")]
+    Percent,
+
     #[token("&")]
     Ampersand,
 

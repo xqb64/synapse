@@ -312,6 +312,9 @@ impl<'src> Codegen<'src> for BinaryExpression<'src> {
             BinaryExpressionKind::Div => {
                 compiler.emit_opcodes(&[Opcode::Div]);
             }
+            BinaryExpressionKind::Mod => {
+                compiler.emit_opcodes(&[Opcode::Mod]);
+            }
             BinaryExpressionKind::Equality(negation) => {
                 compiler.emit_opcodes(&[Opcode::Eq]);
                 if negation {
@@ -522,6 +525,7 @@ pub enum Opcode {
     Sub,
     Mul,
     Div,
+    Mod,
     False,
     Not,
     Neg,
