@@ -328,8 +328,8 @@ pub struct StructObject<'src> {
 
 #[derive(Debug, Copy, Clone)]
 pub struct BytecodePtr {
-    pub ptr: usize,
-    pub location: usize,
+    ptr: usize,
+    location: usize,
 }
 
 impl<'src> std::ops::Add for Object<'src> {
