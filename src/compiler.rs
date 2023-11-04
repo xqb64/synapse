@@ -65,8 +65,14 @@ impl<'src> Compiler<'src> {
         self.bytecode.push(Opcode::Pop(*popcount));
     }
 
-    fn resolve_local(&self, name: &str) -> Option<usize> {
-        self.locals.iter().position(|&local| local == name)
+    fn resolve_local(&mut self, name: &'src str) -> (usize, bool) {
+        match self.locals.iter().position(|&local| local == name) {
+            Some(idx) => (idx, false),
+            None => {
+                self.locals.push(name);
+                (self.locals.len() - 1, true)
+            }
+        }
     }
 
     fn patch_jmp(&mut self, idx: usize) {
@@ -137,8 +143,9 @@ impl<'src> Codegen<'src> for FnStatement<'src> {
 
         compiler.patch_jmp(jmp_idx);
 
-        let f = compiler.functions.get_mut(f.name).unwrap();
-        f.localscount = compiler.locals.len();
+        if let Some(func) = compiler.functions.get_mut(f.name) {
+            func.localscount = compiler.locals.len();
+        }
 
         compiler.locals.clear();
         compiler.pops.clear();
@@ -168,9 +175,13 @@ impl<'src> Codegen<'src> for IfStatement<'src> {
 impl<'src> Codegen<'src> for WhileStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let loop_start = compiler.bytecode.len() - 1;
+
         self.condition.codegen(compiler)?;
+
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
+
         self.body.codegen(compiler)?;
+
         compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
         compiler.patch_jmp(jz_idx);
 
@@ -181,6 +192,7 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
 impl<'src> Codegen<'src> for StructStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         compiler.structs.insert(self.name, self.members.clone());
+
         Ok(())
     }
 }
@@ -192,6 +204,7 @@ impl<'src> Codegen<'src> for ExpressionStatement<'src> {
                 call_expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Pop(1)]);
             }
+
             Expression::Assign(assign_expr) => {
                 assign_expr.codegen(compiler)?;
             }
@@ -221,12 +234,15 @@ impl<'src> Codegen<'src> for ReturnStatement<'src> {
 impl<'src> Codegen<'src> for BlockStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         compiler.pops.push(0);
+
         for statement in &self.body {
             statement.codegen(compiler)?;
         }
+
         for _ in 0..*compiler.pops.last().unwrap() {
             compiler.locals.pop();
         }
+
         compiler.emit_stack_cleanup();
         compiler.pops.pop();
 
@@ -259,6 +275,7 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
             Literal::Num(n) => {
                 compiler.emit_opcodes(&[Opcode::Const(*n)]);
             }
+
             Literal::Bool(b) => match b {
                 true => {
                     compiler.emit_opcodes(&[Opcode::False, Opcode::Not]);
@@ -267,9 +284,11 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
                     compiler.emit_opcodes(&[Opcode::False]);
                 }
             },
+
             Literal::String(s) => {
                 compiler.emit_opcodes(&[Opcode::Str(s.to_string().into())]);
             }
+
             Literal::Null => {
                 compiler.emit_opcodes(&[Opcode::Null]);
             }
@@ -281,15 +300,8 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
 
 impl<'src> Codegen<'src> for VariableExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
-        let local = compiler.resolve_local(self.value);
-
-        if let Some(idx) = local {
-            compiler.emit_opcodes(&[Opcode::Deepget(idx)]);
-        } else {
-            compiler.locals.push(self.value);
-            let idx = compiler.resolve_local(self.value).unwrap();
-            compiler.emit_opcodes(&[Opcode::Deepget(idx)]);
-        }
+        let (idx, _) = compiler.resolve_local(self.value);
+        compiler.emit_opcodes(&[Opcode::Deepget(idx)]);
 
         Ok(())
     }
@@ -304,36 +316,47 @@ impl<'src> Codegen<'src> for BinaryExpression<'src> {
             BinaryExpressionKind::Add => {
                 compiler.emit_opcodes(&[Opcode::Add]);
             }
+
             BinaryExpressionKind::Sub => {
                 compiler.emit_opcodes(&[Opcode::Sub]);
             }
+
             BinaryExpressionKind::Mul => {
                 compiler.emit_opcodes(&[Opcode::Mul]);
             }
+
             BinaryExpressionKind::Div => {
                 compiler.emit_opcodes(&[Opcode::Div]);
             }
+
             BinaryExpressionKind::Mod => {
                 compiler.emit_opcodes(&[Opcode::Mod]);
             }
+
             BinaryExpressionKind::Equality(negation) => {
                 compiler.emit_opcodes(&[Opcode::Eq]);
+
                 if negation {
                     compiler.emit_opcodes(&[Opcode::Not]);
                 }
             }
+
             BinaryExpressionKind::Less => {
                 compiler.emit_opcodes(&[Opcode::Lt]);
             }
+
             BinaryExpressionKind::Greater => {
                 compiler.emit_opcodes(&[Opcode::Gt]);
             }
+
             BinaryExpressionKind::LessEqual => {
                 compiler.emit_opcodes(&[Opcode::Gt, Opcode::Not]);
             }
+
             BinaryExpressionKind::GreaterEqual => {
                 compiler.emit_opcodes(&[Opcode::Lt, Opcode::Not]);
             }
+
             BinaryExpressionKind::Strcat => {
                 compiler.emit_opcodes(&[Opcode::Strcat]);
             }
@@ -379,17 +402,18 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
             Expression::Variable(variable) => {
                 self.rhs.codegen(compiler)?;
 
-                let local = compiler.resolve_local(variable.value);
+                let (idx, fresh) = compiler.resolve_local(variable.value);
 
-                if let Some(idx) = local {
+                if !fresh {
                     compiler.emit_opcodes(&[Opcode::Deepset(idx)]);
                 } else {
-                    compiler.locals.push(variable.value);
-                    if let Some(last) = compiler.pops.last_mut() {
-                        *last += 1;
+                    match compiler.pops.last_mut() {
+                        Some(last) => *last += 1,
+                        None => bail!("compiler: tried to pop an empty stack."),
                     }
                 }
             }
+
             Expression::Unary(unary) => {
                 let mut current = self.lhs.clone();
                 while match *current.clone() {
@@ -406,6 +430,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
 
                 compiler.emit_opcodes(&[Opcode::DerefSet]);
             }
+
             Expression::Get(getexp) => {
                 getexp.expr.codegen(compiler)?;
 
@@ -419,6 +444,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
 
                 compiler.emit_opcodes(&[Opcode::Pop(1)]);
             }
+
             _ => unimplemented!(),
         };
 
@@ -433,18 +459,27 @@ impl<'src> Codegen<'src> for LogicalExpression<'src> {
         match self.op {
             Token::DoubleAmpersand => {
                 let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
+
                 self.rhs.codegen(compiler)?;
+
                 let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+
                 compiler.patch_jmp(jz_idx);
                 compiler.emit_opcodes(&[Opcode::False]);
                 compiler.patch_jmp(jmp_idx);
             }
+
             Token::DoublePipe => {
                 let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
+
                 compiler.emit_opcodes(&[Opcode::False, Opcode::Not]);
+
                 let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+
                 compiler.patch_jmp(jz_idx);
+
                 self.rhs.codegen(compiler)?;
+
                 compiler.patch_jmp(jmp_idx);
             }
             _ => unreachable!(),
@@ -461,21 +496,18 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
                 self.expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Neg]);
             }
+
             Token::Bang => {
                 self.expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Not]);
             }
+
             Token::Ampersand => match &*self.expr {
                 Expression::Variable(var) => {
-                    let local = compiler.resolve_local(var.value);
-                    if let Some(idx) = local {
-                        compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
-                    } else {
-                        compiler.locals.push(var.value);
-                        let idx = compiler.resolve_local(var.value).unwrap();
-                        compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
-                    }
+                    let (idx, _) = compiler.resolve_local(var.value);
+                    compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
                 }
+
                 Expression::Get(getexp) => {
                     getexp.expr.codegen(compiler)?;
 
@@ -485,12 +517,15 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
 
                     compiler.emit_opcodes(&[Opcode::GetattrPtr(getexp.member.to_owned().into())]);
                 }
+
                 _ => bail!("compiler: expected variable"),
             },
+
             Token::Star => {
                 self.expr.codegen(compiler)?;
                 compiler.emit_opcodes(&[Opcode::Deref]);
             }
+
             _ => unreachable!(),
         }
 
@@ -535,6 +570,7 @@ impl<'src> Codegen<'src> for StructExpression<'src> {
 impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.value.codegen(compiler)?;
+
         if let Expression::Variable(var) = &*self.member {
             compiler.emit_opcodes(&[Opcode::Setattr(var.value.to_string().into())]);
         } else {
