@@ -1,9 +1,9 @@
 use crate::parser::{
     AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, CallExpression,
     Expression, ExpressionStatement, FnStatement, GetExpression, IfStatement, Literal,
-    LiteralExpression, PrintStatement, ReturnStatement, Statement, StructExpression,
-    StructInitializerExpression, StructStatement, UnaryExpression, VariableExpression,
-    WhileStatement,
+    LiteralExpression, LogicalExpression, PrintStatement, ReturnStatement, Statement,
+    StructExpression, StructInitializerExpression, StructStatement, UnaryExpression,
+    VariableExpression, WhileStatement,
 };
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
@@ -153,9 +153,11 @@ impl<'src> Codegen<'src> for IfStatement<'src> {
 
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
         self.if_branch.codegen(compiler)?;
-        compiler.patch_jmp(jz_idx);
 
         let else_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+
+        compiler.patch_jmp(jz_idx);
+
         self.else_branch.codegen(compiler)?;
         compiler.patch_jmp(else_idx);
 
@@ -239,6 +241,7 @@ impl<'src> Codegen<'src> for Expression<'src> {
             Expression::Binary(binexp) => binexp.codegen(compiler)?,
             Expression::Call(call) => call.codegen(compiler)?,
             Expression::Assign(assignment) => assignment.codegen(compiler)?,
+            Expression::Logical(logicalexp) => logicalexp.codegen(compiler)?,
             Expression::Unary(unary) => unary.codegen(compiler)?,
             Expression::Get(getexp) => getexp.codegen(compiler)?,
             Expression::Struct(structexp) => structexp.codegen(compiler)?,
@@ -401,6 +404,34 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
             }
             _ => unimplemented!(),
         };
+
+        Ok(())
+    }
+}
+
+impl<'src> Codegen<'src> for LogicalExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.lhs.codegen(compiler)?;
+
+        match self.op {
+            Token::DoubleAmpersand => {
+                let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
+                self.rhs.codegen(compiler)?;
+                let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+                compiler.patch_jmp(jz_idx);
+                compiler.emit_opcodes(&[Opcode::False]);
+                compiler.patch_jmp(jmp_idx);
+            }
+            Token::DoublePipe => {
+                let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
+                compiler.emit_opcodes(&[Opcode::False, Opcode::Not]);
+                let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+                compiler.patch_jmp(jz_idx);
+                self.rhs.codegen(compiler)?;
+                compiler.patch_jmp(jmp_idx);
+            }
+            _ => unreachable!(),
+        }
 
         Ok(())
     }
