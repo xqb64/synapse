@@ -503,7 +503,6 @@ impl<'src> Codegen<'src> for GetExpression<'src> {
         self.expr.codegen(compiler)?;
 
         if self.op == Token::Arrow {
-            println!("It was an arrow!");
             compiler.emit_opcodes(&[Opcode::Deref]);
         }
 
