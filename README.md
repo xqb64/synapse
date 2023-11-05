@@ -111,6 +111,18 @@ cargo test
 
 ## Design notes
 
-```rust
-todo!()
-```
+### Philosophy
+
+The design of the system is a balance among performance, RISC-alikeness, and keeping a dynamic type system.
+
+For example, when string concatenation was introduced into the language, there was a choice whether to overload the current opcode (`Opcode::Add`) or have a separate one. I decided to have a separate opcode `Opcode::Strcat` (and the `++` operator) at the expense of extending the instruction set with an additional instruction. However, this decision has kept the `Opcode::Add` implementation fast and simple and I avoided introducing a performance regression.
+
+At other times, I tried to keep the instruction set minimal at the expense of performance. For example, the `>=` (greater or equal) operator is implemented with two instructions: `[Opcode::Less, Opcode::Not]`.
+
+### Hand-rolled tokenizer vs `Logos`
+
+Initially, `synapse` used a hand-rolled regex tokenizer, but I found it hard to e.g. report which character was not able to be tokenized, so I rewrote the tokenizer to use `Logos` which could do this trivially -- and, I'm sure it's faster than what I had.
+
+### Hand-rolled stack vs Vec
+
+Initially, `synapse` used the `Vec` as the stack, but as I introduced pointers, this was no longer feasible because `Vec` would reallocate and thus invalidate the pointers -- so a fixed-size stack had to be used.
