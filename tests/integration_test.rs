@@ -415,7 +415,6 @@ fn logical() {
         let dir = std::env::temp_dir();
         let input_file_path = dir.join("input.syn");
         let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
-        println!("{}", source);
         writeln!(file, "{}", source).expect("write test file failed");
 
         run_test!(input_file_path.as_path(), object_vec!(expected));
