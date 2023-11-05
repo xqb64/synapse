@@ -22,7 +22,7 @@ fn main() {
 
 NOTE: The above program has been the go-to benchmark throughout the development cycle. The running time on my system (AMD Ryzen 3 3200G with Radeon Vega Graphics) is currently:
 
-```sh
+```
 $ hyperfine --runs 5 './target/release/synapse benches/cases/fib40.syn'
 Benchmark 1: ./target/release/synapse benches/cases/fib40.syn
   Time (mean ± σ):     16.039 s ±  0.233 s    [User: 15.995 s, System: 0.008 s]
@@ -31,7 +31,7 @@ Benchmark 1: ./target/release/synapse benches/cases/fib40.syn
 
 Let's see how long it takes Python to compute `fib(40)`:
 
-```sh
+```
 $ cat fib.py
 def fib(n):
     if n < 2: return n
@@ -97,7 +97,7 @@ fn main() {
 
 Clone the repository and run:
 
-```sh
+```
 cargo build --release
 ```
 
@@ -105,7 +105,7 @@ cargo build --release
 
 To run the test suite, run:
 
-```sh
+```
 cargo test
 ```
 
