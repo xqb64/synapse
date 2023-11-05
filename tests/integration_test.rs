@@ -4,15 +4,13 @@ use std::{collections::VecDeque, path::Path};
 use synapse::vm::Object;
 
 macro_rules! object_vec {
-    ( $($obj:expr),* ) => {
-        {
-            let mut v: Vec<Object> = vec![];
-            $(
-                v.push($obj.into());
-            )*
-            v
-        }
-    }
+    ( $($obj:expr),* ) => {{
+        let mut v: Vec<Object> = vec![];
+        $(
+            v.push($obj.into());
+        )*
+        v
+    }}
 }
 
 fn fetch_stdout(path: impl AsRef<Path>) -> (VecDeque<String>, VecDeque<String>) {

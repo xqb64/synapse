@@ -369,7 +369,6 @@ impl<'src> Parser<'src> {
                     member,
                     op,
                 });
-                println!("{:?}", expr);
             } else {
                 break;
             }
@@ -395,7 +394,6 @@ impl<'src> Parser<'src> {
                 self.parse_variable()
             }
         } else {
-            println!("{:?}", self.current);
             bail!("parser: expected: number, string, (, true, false, null, identifier");
         }
     }
