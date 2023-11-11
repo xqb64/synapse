@@ -2,7 +2,7 @@
 
 A handcrafted virtual stack machine capable of executing a reduced instruction set consisting of only 31 microinstructions. The programs for the VM are written in a minimal, dynamically-typed, Turing-complete programming language featuring basic data types, functions, pointers, structures, and flow control. Besides the VM, the system includes a tokenizer, a recursive-descent parser, and a bytecode compiler.
 
-![synapse](synapse-resized.png)
+![synapse](synapse.png)
 
 ## Examples
 
