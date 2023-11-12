@@ -32,7 +32,7 @@ fn criterion_benchmark_fib30(c: &mut Criterion) -> Result<()> {
     let bytecode = compiler.compile(&ast)?;
     let mut vm = VM::new(bytecode);
 
-    c.bench_function("fib 30", |b| b.iter(|| vm.run()));
+    c.bench_function("fib 30", |b| b.iter(|| vm.exec()));
 
     Ok(())
 }
