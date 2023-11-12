@@ -56,7 +56,7 @@ macro_rules! run_test_error {
     ($type:tt, $path:expr, $expected:expr) => {{
         let mut stderr = fetch_stderr($path);
         assert!(
-            stderr.pop_back().unwrap() == format!("Error: {}: {}", stringify!($type), $expected)
+            stderr.pop_back().unwrap() == format!("synapse: {}: {}", stringify!($type), $expected)
         );
     }};
 }

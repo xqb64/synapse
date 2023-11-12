@@ -65,7 +65,7 @@ where
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn exec(&mut self) -> Result<()> {
         loop {
             if cfg!(debug_assertions) {
                 println!("current instruction: {:?}", self.bytecode[self.ip]);
