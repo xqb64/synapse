@@ -24,9 +24,9 @@ NOTE: The above program has been the go-to benchmark throughout the development 
 
 ```
 $ hyperfine --runs 5 './target/release/synapse benches/cases/fib40.syn'
-Benchmark 1: ./target/release/synapse benches/cases/fib40.syn
-  Time (mean ± σ):     16.039 s ±  0.233 s    [User: 15.995 s, System: 0.008 s]
-  Range (min … max):   15.864 s … 16.444 s    5 runs
+Benchmark 1: target/release/synapse benches/cases/fib40.syn
+  Time (mean ± σ):     14.460 s ±  0.136 s    [User: 14.389 s, System: 0.023 s]
+  Range (min … max):   14.314 s … 14.681 s    5 runs
 ```
 
 Let's see how long it takes Python to compute `fib(40)`:
