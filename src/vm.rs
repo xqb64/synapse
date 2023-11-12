@@ -106,7 +106,7 @@ where
             }
 
             if cfg!(debug_assertions) {
-                println!("stack: {:?}", &self.stack.data[0..self.stack.tos]);
+                self.stack.print_elements();
             }
 
             self.ip += 1;
@@ -241,18 +241,20 @@ where
     }
 
     fn handle_op_deepget(&mut self, idx: usize) {
-        let item = self.stack.get(adjust_idx!(self, idx));
-        self.stack.push(item.clone());
+        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
+        self.stack.push(unsafe { (*ptr).clone() });
     }
 
     fn handle_op_deepgetptr(&mut self, idx: usize) {
-        let item = self.stack.get_mut(adjust_idx!(self, idx));
-        let ptr = item as *mut Object<'_>;
+        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         self.stack.push(Object::Ptr(ptr));
     }
 
     fn handle_op_deepset(&mut self, idx: usize) {
-        self.stack[adjust_idx!(self, idx)] = pop!(self.stack);
+        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
+        unsafe {
+            *ptr = pop!(self.stack);
+        }
     }
 
     fn handle_op_deref(&mut self) -> Result<()> {
@@ -467,59 +469,71 @@ impl<'src> From<&'src str> for Object<'src> {
 
 #[derive(Debug)]
 struct Stack<'src> {
-    data: Box<[Object<'src>]>,
+    data: *mut Object<'src>,
     tos: usize,
+    capacity: usize,
 }
 
 impl<'src> Stack<'src> {
     fn with_capacity(capacity: usize) -> Self {
-        let mut vec = Vec::with_capacity(capacity);
+        use std::mem::ManuallyDrop;
 
-        for _ in 0..capacity {
-            vec.push(Object::Null);
+        let mut vec = ManuallyDrop::new(Vec::with_capacity(capacity));
+
+        Self {
+            data: vec.as_mut_ptr(),
+            tos: 0,
+            capacity,
         }
-
-        let data = vec.into_boxed_slice();
-
-        Self { data, tos: 0 }
     }
 
     fn push(&mut self, item: Object<'src>) {
-        self.data[self.tos] = item;
+        assert!(self.tos < self.capacity, "stack overflow");
+        unsafe {
+            let ptr = self.data.add(self.tos);
+            ptr.write(item);
+        }
         self.tos += 1;
     }
 
     fn pop(&mut self) -> Object<'src> {
+        assert!(self.tos > 0, "popped an empty stack");
         self.tos -= 1;
-        std::mem::replace(
-            unsafe { self.data.get_unchecked_mut(self.tos) },
-            Object::Null,
-        )
+        unsafe {
+            let ptr = self.data.add(self.tos);
+            ptr.read()
+        }
     }
 
     fn len(&self) -> usize {
         self.tos
     }
 
-    fn get_mut(&mut self, n: usize) -> &mut Object<'src> {
-        unsafe { self.data.get_unchecked_mut(n) }
+    fn get_raw(&mut self, n: usize) -> *mut Object<'src> {
+        assert!(n <= self.tos, "tried to access element beyond tos");
+        unsafe { self.data.add(n) }
     }
 
-    fn get(&self, n: usize) -> &Object<'src> {
-        unsafe { self.data.get_unchecked(n) }
+    fn print_elements(&self) {
+        unsafe {
+            print!("stack: [");
+            let mut current = self.data;
+            for n in 0..self.tos {
+                print!("{:?}", *current);
+                if n < self.tos - 1 {
+                    print!(", ");
+                }
+                current = current.add(1); // Move to the next Object
+            }
+            println!("]");
+        }
     }
 }
 
-impl<'src> std::ops::Index<usize> for Stack<'src> {
-    type Output = Object<'src>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.data[index]
-    }
-}
-
-impl<'src> std::ops::IndexMut<usize> for Stack<'src> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.data[index]
+impl<'src> Drop for Stack<'src> {
+    fn drop(&mut self) {
+        unsafe {
+            let _vec = Vec::from_raw_parts(self.data, self.tos, self.capacity);
+        }
     }
 }
