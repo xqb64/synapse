@@ -515,18 +515,16 @@ impl<'src> Stack<'src> {
     }
 
     fn print_elements(&self) {
-        unsafe {
-            print!("stack: [");
-            let mut current = self.data;
-            for n in 0..self.tos {
-                print!("{:?}", *current);
-                if n < self.tos - 1 {
-                    print!(", ");
-                }
-                current = current.add(1); // Move to the next Object
+        print!("stack: [");
+        let mut current = self.data;
+        for n in 0..self.tos {
+            print!("{:?}", unsafe { &*current });
+            if n < self.tos - 1 {
+                print!(", ");
             }
-            println!("]");
+            current = unsafe { current.add(1) };
         }
+        println!("]");
     }
 }
 
