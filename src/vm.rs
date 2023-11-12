@@ -38,15 +38,15 @@ macro_rules! binop_relational {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        let BytecodePtr { ptr: _, location } = $self.frame_ptrs.last().unwrap();
+        let BytecodePtr { ptr: _, location } = unsafe { *$self.frame_ptrs.last() };
         location + $index
     }};
 }
 
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode [Opcode],
-    stack: Stack<'src>,
-    frame_ptrs: Vec<BytecodePtr>,
+    stack: Stack<Object<'src>>,
+    frame_ptrs: Stack<BytecodePtr>,
     ip: usize,
 }
 
@@ -60,7 +60,7 @@ where
         VM {
             bytecode,
             stack: Stack::with_capacity(STACK_MIN),
-            frame_ptrs: Vec::with_capacity(STACK_MIN),
+            frame_ptrs: Stack::with_capacity(STACK_MIN),
             ip: 0,
         }
     }
@@ -235,7 +235,7 @@ where
     }
 
     fn handle_op_ret(&mut self) {
-        let retaddr = self.frame_ptrs.pop().unwrap();
+        let retaddr = pop!(self.frame_ptrs);
         let BytecodePtr { ptr, location: _ } = retaddr;
         self.ip = ptr;
     }
@@ -468,13 +468,16 @@ impl<'src> From<&'src str> for Object<'src> {
 }
 
 #[derive(Debug)]
-struct Stack<'src> {
-    data: *mut Object<'src>,
+struct Stack<T> {
+    data: *mut T,
     tos: usize,
     capacity: usize,
 }
 
-impl<'src> Stack<'src> {
+impl<T> Stack<T>
+where
+    T: std::fmt::Debug,
+{
     fn with_capacity(capacity: usize) -> Self {
         use std::mem::ManuallyDrop;
 
@@ -487,7 +490,7 @@ impl<'src> Stack<'src> {
         }
     }
 
-    fn push(&mut self, item: Object<'src>) {
+    fn push(&mut self, item: T) {
         assert!(self.tos < self.capacity, "stack overflow");
         unsafe {
             let ptr = self.data.add(self.tos);
@@ -496,7 +499,7 @@ impl<'src> Stack<'src> {
         self.tos += 1;
     }
 
-    fn pop(&mut self) -> Object<'src> {
+    fn pop(&mut self) -> T {
         assert!(self.tos > 0, "popped an empty stack");
         self.tos -= 1;
         unsafe {
@@ -509,9 +512,14 @@ impl<'src> Stack<'src> {
         self.tos
     }
 
-    fn get_raw(&mut self, n: usize) -> *mut Object<'src> {
+    fn get_raw(&mut self, n: usize) -> *mut T {
         assert!(n <= self.tos, "tried to access element beyond tos");
         unsafe { self.data.add(n) }
+    }
+
+    fn last(&mut self) -> *mut T {
+        assert!(self.tos > 0, "no elements on the stack");
+        unsafe { self.data.add(self.tos - 1) }
     }
 
     fn print_elements(&self) {
@@ -528,7 +536,7 @@ impl<'src> Stack<'src> {
     }
 }
 
-impl<'src> Drop for Stack<'src> {
+impl<T> Drop for Stack<T> {
     fn drop(&mut self) {
         unsafe {
             let _vec = Vec::from_raw_parts(self.data, self.tos, self.capacity);
