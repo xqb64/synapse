@@ -8,8 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 logos = "0.13.0"
-regex = "1.10.2"
-segvec = "0.2.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.12"
