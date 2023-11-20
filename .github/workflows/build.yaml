@@ -4,23 +4,21 @@ on: [push, pull_request]
 
 jobs:
   fmt:
-    name: cargo check
+    name: cargo fmt
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Set up Rust @ stable
-      uses: actions-rs/toolchain@v1
+    - uses: actions-rs/toolchain@v1
       with:
+        profile: minimal
         toolchain: stable
         override: true
-        components: rustfmt
-
-    - name: Run cargo fmt
-      uses: actions-rs/cargo@v1
+    - run: rustup component add rustfmt
+    - uses: actions-rs/cargo@v1
       with:
-        command: fmt --all -- --check
+        command: fmt
+        args: --all -- --check
 
   clippy:
     name: cargo clippy
@@ -28,37 +26,30 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Set up Rust @ stable
-      uses: actions-rs/toolchain@v1
+    - uses: actions-rs/toolchain@v1
       with:
+        profile: minimal
         toolchain: stable
         override: true
-        components: clippy
-
-    - name: Run cargo clippy
-      uses: actions-rs/cargo@v1
+    - run: rustup component add clippy
+    - uses: actions-rs/cargo@v1
       with:
-        command: clippy -- -D warnings
+        command: clippy
+        args: -- -D warnings
 
   test:
     name: cargo test
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Rust @ stable
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
-        components: test
-
-    - name: Run cargo test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
 
   udeps:
     name: cargo udeps
@@ -66,14 +57,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Set up Rust @ nightly
-      run: rustup toolchain install nightly
-
-    - name: Install cargo-udeps
-      run: cargo install cargo-udeps --locked
-
-    - name: Run cargo udeps
-      uses: actions-rs/cargo@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: nightly
+        override: true
+    - run: cargo install cargo-udeps --locked
+    - uses: actions-rs/cargo@v1
       with:
         command: udeps
