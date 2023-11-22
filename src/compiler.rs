@@ -494,7 +494,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                 compiler.emit_opcodes(&[Opcode::Pop(1)]);
             }
 
-            _ => unimplemented!(),
+            _ => bail!("compiler: invalid assignment"),
         };
 
         Ok(())

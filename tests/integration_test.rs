@@ -361,6 +361,15 @@ fn compiler_error_fn_not_defined() {
 }
 
 #[test]
+fn compiler_error_invalid_assignment() {
+    let (path, expected) = (
+        "tests/cases/compiler_error_invalid_assignment.syn",
+        "invalid assignment",
+    );
+    run_test_error!(compiler, path, expected);
+}
+
+#[test]
 fn ptr() {
     let (path, expected) = ("tests/cases/ptr.syn", object_vec![3.0]);
     run_test!(path, expected);
