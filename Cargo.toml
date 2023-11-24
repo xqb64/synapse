@@ -1,9 +1,14 @@
 [package]
 name = "synapse"
+authors = ["xqb64 <x@nuked.one>"]
+description = "A lean-and-mean virtual stack machine with a reduced instruction set"
+readme = "README.md"
+repository = "https://github.com/xqb64/synapse"
+license = "MIT"
+keywords = ["virtual machine"]
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.75"
