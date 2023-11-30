@@ -2,11 +2,38 @@
 
 <h1 align="center">synapse</h1>
 
-A handcrafted virtual stack machine capable of executing a reduced instruction set consisting of only 31 microinstructions. The programs for the VM are written in a minimal, dynamically-typed, Turing-complete programming language featuring basic data types, functions, pointers, structures, and flow control. Besides the VM, the system includes a tokenizer, a recursive-descent parser, and a bytecode compiler.
+This project is my second venture into the field of programming language design. Similarly to [my initial attempt](https://github.com/xqb64/venom), the main idea was not to engineer a production-quality system, but to have fun trying to streamline performance and broaden my horizons. Given the educational nature of the project, I'm aware it has its fair share of limitations, but despite this, I'd argue that the features listed off below make it lean towards being somewhat useful:
 
-## Examples
+- basic data types
+  - numbers (double-precision floating point)
+  - booleans
+  - strings
+  - structures
+  - pointers
+  - null
+- operators for the said types
+  - `==`, `!=`, `<`, `>`, `<=`, `>=`
+  - `+`, `-`, `*`, `/`, `%`
+  - `++` (string concatenation)
+  - `&`, `*`, `->` (for pointers)
+- control flow
+  - `if`, `else`
+  - `while` (and `break` and `continue`, of course)
+- functions
+  - `main` is the entry-point
+  - `return` is mandatory
+  - recursion!
 
-Fibonacci:
+Global scope is **NOT** allowed.
+
+The entire system consists of:
+
+  - a tokenizer
+  - a recursive-descent parser
+  - a bytecode compiler
+  - a virtual machine
+
+## Let's talk numbers
 
 ```rust
 fn fib(n) {
@@ -29,7 +56,7 @@ Benchmark 1: target/release/synapse benches/cases/fib40.syn
   Range (min … max):   14.314 s … 14.681 s    5 runs
 ```
 
-Let's see how long it takes Python to compute `fib(40)`:
+A mandatory comparison to Python is in order:
 
 ```
 $ cat fib.py
@@ -46,9 +73,11 @@ Benchmark 1: python3 fib.py
   Range (min … max):   26.964 s … 27.335 s    5 runs
 ```
 
-To be fair, Python could execute this code in a blink of an eye with `@functools.lru_cache()`.
+Other than this, it's pointless to compare the two, because obviously, besides being a lot more useful, Python comes with `@functools.lru_cache()` and could execute this code in a blink of an eye with it.
 
-Linked list:
+## Examples
+
+As of now, `synapse` does not have any built-in data structures, but you could write a linked list using the `struct` type:
 
 ```rust
 struct node {
@@ -113,7 +142,7 @@ cargo test
 
 ### Philosophy
 
-The design of the system is a balance among performance, RISC-alikeness, and keeping a dynamic type system.
+The design of the system is a balance among performance and RISC-alikeness.
 
 For example, when string concatenation was introduced into the language, there was a choice whether to overload the current opcode (`Opcode::Add`) or have a separate one. I decided to have a separate opcode `Opcode::Strcat` (and the `++` operator) at the expense of extending the instruction set with an additional instruction. However, this decision has kept the `Opcode::Add` implementation fast and simple and I avoided introducing a performance regression.
 
@@ -126,3 +155,11 @@ Initially, `synapse` used a hand-rolled regex tokenizer, but I found it hard to 
 ### Hand-rolled stack vs Vec
 
 Initially, `synapse` used the `Vec` as the stack, but as I introduced pointers, this was no longer feasible because `Vec` would reallocate and thus invalidate the pointers -- so a fixed-size stack had to be used.
+
+## Contributing
+
+Contributors to this project are very welcome -- specifically, suggestions (and PRs) as for how to make the whole system even faster, because I suspect there's still more performance left to be squeezed out.
+
+## Licensing
+
+Licensed under the [MIT License](https://opensource.org/licenses/MIT). For details, see [LICENSE](https://github.com/xqb64/synapse/blob/master/LICENSE).
