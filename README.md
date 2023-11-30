@@ -1,4 +1,6 @@
-![synapse](synapse.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xqb64/synapse/master/synapse.png" alt="synapse"/>
+</p>
 
 <h1 align="center">synapse</h1>
 
