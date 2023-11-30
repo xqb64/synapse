@@ -464,15 +464,6 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
             }
 
             Expression::Unary(unary) => {
-                let mut current = self.lhs.clone();
-                while match *current.clone() {
-                    Expression::Unary(u) => {
-                        current = u.expr;
-                        true
-                    }
-                    _ => false,
-                } {}
-
                 unary.expr.codegen(compiler)?;
 
                 self.rhs.codegen(compiler)?;
