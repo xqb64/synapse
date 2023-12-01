@@ -163,7 +163,7 @@ Initially, `synapse` used the `Vec` as the stack, but as I introduced pointers, 
 Contributors to this project are very welcome -- specifically, suggestions (and PRs) as for how to make the whole system even faster, because I suspect there's still more performance left to be squeezed out.
 
 ## See also
-[venom](https://github.com/xqb64/venom) - My firist attempt, written in C
+[venom](https://github.com/xqb64/venom) - My first attempt, written in C
 
 ## Licensing
 
