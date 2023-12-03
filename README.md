@@ -16,8 +16,10 @@ This project is my second venture into the field of programming language design.
 - operators for the said types
   - `==`, `!=`, `<`, `>`, `<=`, `>=`
   - `+`, `-`, `*`, `/`, `%`
+  - `&&`, `||`, `!` (logical and/or/not)
   - `++` (string concatenation)
   - `&`, `*`, `->` (for pointers)
+  - `.` (member access)
 - control flow
   - `if`, `else`
   - `while` (and `break` and `continue`, of course)
