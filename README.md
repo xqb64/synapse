@@ -27,6 +27,7 @@ This project is my second venture into the field of programming language design.
   - `main` is the entry-point
   - `return` is mandatory
   - recursion!
+- `print` statement
 
 Global scope is **NOT** allowed.
 
