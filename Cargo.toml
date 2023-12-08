@@ -17,6 +17,8 @@ logos = "0.13.0"
 [dev-dependencies]
 assert_cmd = "2.0.12"
 criterion = { version = "0.5.1", features = ["html_reports"] }
+rand = "0.8.5"
+rstest = "0.18.2"
 
 [[bench]]
 name = "fib30"

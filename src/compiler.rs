@@ -57,6 +57,101 @@ impl<'src> Compiler<'src> {
         Ok(self.bytecode.as_slice())
     }
 
+    fn compile_variable_assignment(
+        &mut self,
+        assign_expr: AssignExpression<'src>,
+        variable_expr: VariableExpression<'src>,
+        is_specialized: bool,
+        operator: Token<'src>,
+    ) -> Result<()> {
+        let (idx, fresh) = self.resolve_local(variable_expr.value);
+
+        if is_specialized {
+            self.emit_opcodes(&[Opcode::Deepget(idx)]);
+            assign_expr.rhs.codegen(self)?;
+            self.handle_specialized_operator(operator);
+        } else {
+            assign_expr.rhs.codegen(self)?;
+        }
+
+        if !fresh {
+            self.emit_opcodes(&[Opcode::Deepset(idx)]);
+        } else {
+            match self.pops.last_mut() {
+                Some(last) => *last += 1,
+                None => bail!("compiler: tried to pop an empty stack."),
+            }
+        }
+
+        Ok(())
+    }
+
+    fn compile_unary_assignment(
+        &mut self,
+        unary_expr: UnaryExpression<'src>,
+        rhs: Expression<'src>,
+        is_specialized: bool,
+        operator: Token<'src>,
+    ) -> Result<()> {
+        unary_expr.expr.codegen(self)?;
+
+        if is_specialized {
+            self.emit_opcodes(&[Opcode::Dup]);
+            rhs.codegen(self)?;
+            self.handle_specialized_operator(operator);
+        } else {
+            rhs.codegen(self)?;
+        }
+
+        self.emit_opcodes(&[Opcode::DerefSet]);
+
+        Ok(())
+    }
+
+    fn compile_get_assignment(
+        &mut self,
+        get_expr: GetExpression<'src>,
+        rhs: Expression<'src>,
+        is_specialized: bool,
+        operator: Token<'src>,
+    ) -> Result<()> {
+        get_expr.expr.codegen(self)?;
+
+        if get_expr.op == Token::Arrow {
+            self.emit_opcodes(&[Opcode::Deref]);
+        }
+
+        if is_specialized {
+            self.emit_opcodes(&[Opcode::Dup]);
+            self.emit_opcodes(&[Opcode::Getattr(get_expr.member.to_owned().into())]);
+            rhs.codegen(self)?;
+            self.handle_specialized_operator(operator);
+        } else {
+            rhs.codegen(self)?;
+        }
+
+        self.emit_opcodes(&[Opcode::Setattr(get_expr.member.to_owned().into())]);
+        self.emit_opcodes(&[Opcode::Pop(1)]);
+
+        Ok(())
+    }
+
+    fn handle_specialized_operator(&mut self, operator: Token<'src>) {
+        match operator {
+            Token::PlusEqual => self.emit_opcodes(&[Opcode::Add]),
+            Token::MinusEqual => self.emit_opcodes(&[Opcode::Sub]),
+            Token::StarEqual => self.emit_opcodes(&[Opcode::Mul]),
+            Token::SlashEqual => self.emit_opcodes(&[Opcode::Div]),
+            Token::PercentEqual => self.emit_opcodes(&[Opcode::Mod]),
+            Token::AmpersandEqual => self.emit_opcodes(&[Opcode::BitAnd]),
+            Token::PipeEqual => self.emit_opcodes(&[Opcode::BitOr]),
+            Token::CaretEqual => self.emit_opcodes(&[Opcode::BitXor]),
+            Token::LessLessEqual => self.emit_opcodes(&[Opcode::BitShl]),
+            Token::GreaterGreaterEqual => self.emit_opcodes(&[Opcode::BitShr]),
+            _ => unreachable!(),
+        };
+    }
+
     fn emit_opcodes(&mut self, opcodes: &[Opcode]) -> usize {
         for opcode in opcodes {
             self.bytecode.push(opcode.clone());
@@ -406,6 +501,26 @@ impl<'src> Codegen<'src> for BinaryExpression<'src> {
                 compiler.emit_opcodes(&[Opcode::Lt, Opcode::Not]);
             }
 
+            BinaryExpressionKind::BitwiseAnd => {
+                compiler.emit_opcodes(&[Opcode::BitAnd]);
+            }
+
+            BinaryExpressionKind::BitwiseOr => {
+                compiler.emit_opcodes(&[Opcode::BitOr]);
+            }
+
+            BinaryExpressionKind::BitwiseXor => {
+                compiler.emit_opcodes(&[Opcode::BitXor]);
+            }
+
+            BinaryExpressionKind::BitwiseShl => {
+                compiler.emit_opcodes(&[Opcode::BitShl]);
+            }
+
+            BinaryExpressionKind::BitwiseShr => {
+                compiler.emit_opcodes(&[Opcode::BitShr]);
+            }
+
             BinaryExpressionKind::Strcat => {
                 compiler.emit_opcodes(&[Opcode::Strcat]);
             }
@@ -447,42 +562,33 @@ impl<'src> Codegen<'src> for CallExpression<'src> {
 
 impl<'src> Codegen<'src> for AssignExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        let is_specialized = self.op != Token::Equal;
         match &*self.lhs {
             Expression::Variable(variable) => {
-                self.rhs.codegen(compiler)?;
-
-                let (idx, fresh) = compiler.resolve_local(variable.value);
-
-                if !fresh {
-                    compiler.emit_opcodes(&[Opcode::Deepset(idx)]);
-                } else {
-                    match compiler.pops.last_mut() {
-                        Some(last) => *last += 1,
-                        None => bail!("compiler: tried to pop an empty stack."),
-                    }
-                }
+                compiler.compile_variable_assignment(
+                    self.clone(),
+                    variable.clone(),
+                    is_specialized,
+                    self.op.clone(),
+                )?;
             }
 
             Expression::Unary(unary) => {
-                unary.expr.codegen(compiler)?;
-
-                self.rhs.codegen(compiler)?;
-
-                compiler.emit_opcodes(&[Opcode::DerefSet]);
+                compiler.compile_unary_assignment(
+                    unary.clone(),
+                    (*self.rhs).clone(),
+                    is_specialized,
+                    self.op.clone(),
+                )?;
             }
 
             Expression::Get(getexp) => {
-                getexp.expr.codegen(compiler)?;
-
-                if getexp.op == Token::Arrow {
-                    compiler.emit_opcodes(&[Opcode::Deref]);
-                }
-
-                self.rhs.codegen(compiler)?;
-
-                compiler.emit_opcodes(&[Opcode::Setattr(getexp.member.to_owned().into())]);
-
-                compiler.emit_opcodes(&[Opcode::Pop(1)]);
+                compiler.compile_get_assignment(
+                    getexp.clone(),
+                    (*self.rhs).clone(),
+                    is_specialized,
+                    self.op.clone(),
+                )?;
             }
 
             _ => bail!("compiler: invalid assignment"),
@@ -566,6 +672,11 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
                 compiler.emit_opcodes(&[Opcode::Deref]);
             }
 
+            Token::Tilde => {
+                self.expr.codegen(compiler)?;
+                compiler.emit_opcodes(&[Opcode::BitNot]);
+            }
+
             _ => unreachable!(),
         }
 
@@ -630,6 +741,12 @@ pub enum Opcode {
     Mul,
     Div,
     Mod,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitShl,
+    BitShr,
+    BitNot,
     False,
     Not,
     Neg,
@@ -652,6 +769,7 @@ pub enum Opcode {
     Setattr(Rc<String>),
     Strcat,
     Struct(Rc<String>),
+    Dup,
     Pop(usize),
     Halt,
 }

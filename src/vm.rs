@@ -23,6 +23,10 @@ macro_rules! binop_arithmetic {
     };
 }
 
+fn prepare4bitwise(a: f64, b: f64) -> (i32, i32) {
+    (a as i32, b as i32)
+}
+
 macro_rules! binop_relational {
     ($self:tt, $op:tt) => {
         {
@@ -80,6 +84,12 @@ where
                 Opcode::Mul => self.handle_op_mul()?,
                 Opcode::Div => self.handle_op_div()?,
                 Opcode::Mod => self.handle_op_mod()?,
+                Opcode::BitAnd => self.handle_op_bitand()?,
+                Opcode::BitOr => self.handle_op_bitor()?,
+                Opcode::BitXor => self.handle_op_bitxor()?,
+                Opcode::BitNot => self.handle_op_bitnot()?,
+                Opcode::BitShl => self.handle_op_bitshl()?,
+                Opcode::BitShr => self.handle_op_bitshr()?,
                 Opcode::False => self.handle_op_false(),
                 Opcode::Not => self.handle_op_not()?,
                 Opcode::Neg => self.handle_op_neg()?,
@@ -101,6 +111,7 @@ where
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
                 Opcode::Strcat => self.handle_op_strcat()?,
+                Opcode::Dup => self.handle_op_dup(),
                 Opcode::Pop(popcount) => self.handle_op_pop(*popcount),
                 Opcode::Halt => break Ok(()),
             }
@@ -173,6 +184,40 @@ where
     fn handle_op_mod(&mut self) -> Result<()> {
         binop_arithmetic!(self, %);
 
+        Ok(())
+    }
+
+    fn handle_op_bitand(&mut self) -> Result<()> {
+        binop_arithmetic!(self, &);
+
+        Ok(())
+    }
+
+    fn handle_op_bitor(&mut self) -> Result<()> {
+        binop_arithmetic!(self, |);
+
+        Ok(())
+    }
+
+    fn handle_op_bitxor(&mut self) -> Result<()> {
+        binop_arithmetic!(self, ^);
+
+        Ok(())
+    }
+
+    fn handle_op_bitshl(&mut self) -> Result<()> {
+        binop_arithmetic!(self, <<);
+
+        Ok(())
+    }
+
+    fn handle_op_bitshr(&mut self) -> Result<()> {
+        binop_arithmetic!(self, >>);
+
+        Ok(())
+    }
+
+    fn handle_op_bitnot(&mut self) -> Result<()> {
         Ok(())
     }
 
@@ -328,6 +373,11 @@ where
         self.stack.push(structobj);
     }
 
+    fn handle_op_dup(&mut self) {
+        let top = self.stack.get_raw(self.stack.tos - 1);
+        self.stack.push(unsafe { (*top).clone() });
+    }
+
     fn handle_op_pop(&mut self, popcount: usize) {
         for _ in 0..popcount {
             pop!(self.stack);
@@ -412,11 +462,86 @@ impl<'src> std::ops::Rem for Object<'src> {
     }
 }
 
+impl<'src> std::ops::BitAnd for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => {
+                let (a, b) = prepare4bitwise(a, b);
+                Ok(((a & b) as f64).into())
+            }
+            _ => bail!("vm: only numbers can be %"),
+        }
+    }
+}
+
+impl<'src> std::ops::BitOr for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => {
+                let (a, b) = prepare4bitwise(a, b);
+                Ok(((a | b) as f64).into())
+            }
+            _ => bail!("vm: only numbers can be %"),
+        }
+    }
+}
+
+impl<'src> std::ops::BitXor for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => {
+                let (a, b) = prepare4bitwise(a, b);
+                Ok(((a ^ b) as f64).into())
+            }
+            _ => bail!("vm: only numbers can be %"),
+        }
+    }
+}
+
+impl<'src> std::ops::Shl for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn shl(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => {
+                let (a, b) = prepare4bitwise(a, b);
+                Ok(((a << b) as f64).into())
+            }
+            _ => bail!("vm: only numbers can be %"),
+        }
+    }
+}
+
+impl<'src> std::ops::Shr for Object<'src> {
+    type Output = Result<Object<'src>>;
+
+    fn shr(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(a), Object::Number(b)) => {
+                let (a, b) = prepare4bitwise(a, b);
+                Ok(((a >> b) as f64).into())
+            }
+            _ => bail!("vm: only numbers can be %"),
+        }
+    }
+}
+
 impl<'src> std::ops::Not for Object<'src> {
     type Output = Result<Object<'src>>;
 
     fn not(self) -> Self::Output {
         match self {
+            Object::Number(n) => {
+                let truncated = n as u64;
+                let reduced = (truncated % (1u64 << 32)) as u32;
+                Ok(((!reduced) as f64).into())
+            }
             Object::Bool(b) => Ok((!b).into()),
             _ => bail!("vm: only bools can be !"),
         }

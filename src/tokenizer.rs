@@ -48,14 +48,26 @@ pub enum Token<'src> {
     #[token("+")]
     Plus,
 
+    #[token("+=")]
+    PlusEqual,
+
     #[token("-")]
     Minus,
+
+    #[token("-=")]
+    MinusEqual,
 
     #[token("*")]
     Star,
 
+    #[token("*=")]
+    StarEqual,
+
     #[token("/")]
     Slash,
+
+    #[token("/=")]
+    SlashEqual,
 
     #[token("=")]
     Equal,
@@ -111,14 +123,47 @@ pub enum Token<'src> {
     #[token("%")]
     Percent,
 
+    #[token("%=")]
+    PercentEqual,
+
     #[token("&")]
     Ampersand,
 
     #[token("&&")]
     DoubleAmpersand,
 
+    #[token("&=")]
+    AmpersandEqual,
+
+    #[token("|")]
+    Pipe,
+
     #[token("||")]
     DoublePipe,
+
+    #[token("|=")]
+    PipeEqual,
+
+    #[token("^")]
+    Caret,
+
+    #[token("^=")]
+    CaretEqual,
+
+    #[token("~")]
+    Tilde,
+
+    #[token(">>")]
+    GreaterGreater,
+
+    #[token(">>=")]
+    GreaterGreaterEqual,
+
+    #[token("<<")]
+    LessLess,
+
+    #[token("<<=")]
+    LessLessEqual,
 
     #[token("->")]
     Arrow,

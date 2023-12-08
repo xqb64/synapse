@@ -1,4 +1,5 @@
 use assert_cmd;
+use rstest::*;
 use std::io::Write;
 use std::{collections::VecDeque, path::Path};
 use synapse::vm::Object;
@@ -387,43 +388,157 @@ fn ptr03() {
     run_test!(path, expected);
 }
 
-#[test]
-fn logical() {
-    let test_cases = vec![
-        // Logical AND
-        (32, 64, 32, "&&", 64, "Run!"),
-        (32, 64, 16, "&&", 64, "Shouldn't run!"),
-        (32, 64, 32, "&&", 16, "Shouldn't run!"),
-        (32, 64, 128, "&&", 256, "Shouldn't run!"),
-        // Logical OR
-        (32, 64, 32, "||", 64, "Run!"),
-        (32, 64, 16, "||", 64, "Run!"),
-        (32, 64, 32, "||", 16, "Run!"),
-        (32, 64, 128, "||", 256, "Shouldn't run!"),
-    ];
-
-    for (a, b, if_a_equals, op, if_b_equals, expected) in test_cases {
-        let source = format!(
-            r#"
-            fn main() {{
-                x = {};
-                y = {};
-                if x == {} {} y == {} {{
-                  print "Run!";
-                }} else {{
-                  print "Shouldn't run!";
-                }}
-                return 0;
+#[rstest]
+#[case(32, 64, 32, "&&", 64, "Run!")]
+#[case(32, 64, 16, "&&", 64, "Shouldn't run!")]
+#[case(32, 64, 32, "&&", 16, "Shouldn't run!")]
+#[case(32, 64, 128, "&&", 256, "Shouldn't run!")]
+#[case(32, 64, 32, "||", 64, "Run!")]
+#[case(32, 64, 16, "||", 64, "Run!")]
+#[case(32, 64, 32, "||", 16, "Run!")]
+#[case(32, 64, 128, "||", 256, "Shouldn't run!")]
+fn logical(
+    #[case] a: usize,
+    #[case] b: usize,
+    #[case] if_a_equals: usize,
+    #[case] op: &str,
+    #[case] if_b_equals: usize,
+    #[case] expected: &str,
+) {
+    let source = format!(
+        r#"
+        fn main() {{
+            x = {};
+            y = {};
+            if x == {} {} y == {} {{
+                print "Run!";
+            }} else {{
+                print "Shouldn't run!";
             }}
-            "#,
-            a, b, if_a_equals, op, if_b_equals
-        );
+            return 0;
+        }}
+        "#,
+        a, b, if_a_equals, op, if_b_equals
+    );
 
-        let dir = std::env::temp_dir();
-        let input_file_path = dir.join("input.syn");
-        let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
-        writeln!(file, "{}", source).expect("write test file failed");
+    let random = rand::random::<u8>();
+    let filename = format!("input_logical_{}.syn", random);
+    let dir = std::env::temp_dir();
+    let input_file_path = dir.join(filename);
+    let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
+    writeln!(file, "{}", source).expect("write test file failed");
 
-        run_test!(input_file_path.as_path(), object_vec!(expected));
-    }
+    run_test!(input_file_path.as_path(), object_vec!(expected));
+}
+
+#[rstest]
+#[case(8, "|", 1, object_vec![9.0])]
+#[case(15, "&", 1, object_vec![1.0])]
+#[case(15, "^", 2, object_vec![13.0])]
+#[case(1, "<<", 5, object_vec![32.0])]
+#[case(64, ">>", 2, object_vec![16.0])]
+fn bitwise(
+    #[case] left: usize,
+    #[case] op: &str,
+    #[case] right: usize,
+    #[case] expected: Vec<Object>,
+) {
+    let source = format!(
+        r#"
+        fn test_bitwise(a, b) {{
+            return a {} b; 
+        }}
+        fn main() {{
+            print test_bitwise({}, {});
+            return 0;
+        }}
+        "#,
+        op, left, right,
+    );
+    let random = rand::random::<u8>();
+    let filename = format!("input_bitwise_{}.syn", random);
+    let dir = std::env::temp_dir();
+    let input_file_path = dir.join(filename);
+    let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
+    writeln!(file, "{}", source).expect("write test file failed");
+
+    run_test!(input_file_path.as_path(), expected);
+}
+
+#[rstest]
+#[case(0, "<", 10, 2, "+", object_vec![0.0, 2.0, 4.0, 6.0, 8.0])]
+#[case(10, ">", 0, 2, "-", object_vec![10.0, 8.0, 6.0, 4.0, 2.0])]
+#[case(1, "!=", 64, 2, "*", object_vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0])]
+#[case(64, "!=", 1, 2, "/", object_vec![64.0, 32.0, 16.0, 8.0, 4.0, 2.0])]
+#[case(128, "!=", 1, 1, ">>", object_vec![128.0, 64.0, 32.0, 16.0, 8.0, 4.0, 2.0])]
+#[case(1, "!=", 128, 1, "<<", object_vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0])]
+fn compound_assignment(
+    #[case] start: usize,
+    #[case] cond_op: &str,
+    #[case] end: usize,
+    #[case] step: usize,
+    #[case] op: &str,
+    #[case] expected: Vec<Object>,
+) {
+    let source = format!(
+        r#"
+        fn test_compound_assignment() {{
+            x = {};
+            while (x {} {}) {{
+            print x;
+            x {}= {};
+            }}
+            return 0; 
+        }}
+        fn main() {{
+            test_compound_assignment();
+            return 0;
+        }}
+        "#,
+        start, cond_op, end, op, step,
+    );
+    let random = rand::random::<u8>();
+    let filename = format!("input_compound_{}.syn", random);
+    let dir = std::env::temp_dir();
+    let input_file_path = dir.join(filename);
+    let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
+    writeln!(file, "{}", source).expect("write test file failed");
+
+    run_test!(input_file_path.as_path(), expected);
+}
+
+#[rstest]
+#[case(32, "&", 2, object_vec![0.0])]
+#[case(32, "|", 1, object_vec![33.0])]
+#[case(32, "^", 1, object_vec![33.0])]
+#[case(5, "%", 3, object_vec![2.0])]
+fn more_compound_assignment(
+    #[case] left: usize,
+    #[case] op: &str,
+    #[case] right: usize,
+    #[case] expected: Vec<Object>,
+) {
+    let source = format!(
+        r#"
+        fn test_more_compound_assignment() {{
+            x = {};
+            x {}= {};
+            return x; 
+        }}
+        fn main() {{
+            print test_more_compound_assignment();
+            return 0;
+        }}
+        "#,
+        left, op, right,
+    );
+
+    let random = rand::random::<u8>();
+    let filename = format!("input_more_compound_{}.syn", random);
+    let dir = std::env::temp_dir();
+    let input_file_path = dir.join(filename);
+    let mut file = std::fs::File::create(&input_file_path).expect("create test file failed");
+    writeln!(file, "{}", source).expect("write test file failed");
+
+    run_test!(input_file_path.as_path(), expected);
 }

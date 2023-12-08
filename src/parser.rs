@@ -208,10 +208,24 @@ impl<'src> Parser<'src> {
 
     fn assignment(&mut self) -> Result<Expression<'src>> {
         let mut result = self.or()?;
-        while self.is_next(&[Token::Equal]) {
+        while self.is_next(&[
+            Token::Equal,
+            Token::PlusEqual,
+            Token::MinusEqual,
+            Token::StarEqual,
+            Token::SlashEqual,
+            Token::PercentEqual,
+            Token::LessLessEqual,
+            Token::GreaterGreaterEqual,
+            Token::AmpersandEqual,
+            Token::CaretEqual,
+            Token::PipeEqual,
+        ]) {
+            let op = self.previous.unwrap();
             result = Expression::Assign(AssignExpression {
                 lhs: result.into(),
                 rhs: self.or()?.into(),
+                op,
             });
         }
         Ok(result)
@@ -230,12 +244,48 @@ impl<'src> Parser<'src> {
     }
 
     fn and(&mut self) -> Result<Expression<'src>> {
-        let mut result = self.equality()?;
+        let mut result = self.bitwise_or()?;
         while self.is_next(&[Token::DoubleAmpersand]) {
             result = Expression::Logical(LogicalExpression {
                 lhs: result.into(),
-                rhs: self.equality()?.into(),
+                rhs: self.bitwise_or()?.into(),
                 op: Token::DoubleAmpersand,
+            });
+        }
+        Ok(result)
+    }
+
+    fn bitwise_or(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.bitwise_xor()?;
+        while self.is_next(&[Token::Pipe]) {
+            result = Expression::Binary(BinaryExpression {
+                lhs: result.into(),
+                rhs: self.bitwise_xor()?.into(),
+                kind: BinaryExpressionKind::BitwiseOr,
+            });
+        }
+        Ok(result)
+    }
+
+    fn bitwise_xor(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.bitwise_and()?;
+        while self.is_next(&[Token::Caret]) {
+            result = Expression::Binary(BinaryExpression {
+                lhs: result.into(),
+                rhs: self.bitwise_and()?.into(),
+                kind: BinaryExpressionKind::BitwiseXor,
+            });
+        }
+        Ok(result)
+    }
+
+    fn bitwise_and(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.equality()?;
+        while self.is_next(&[Token::Ampersand]) {
+            result = Expression::Binary(BinaryExpression {
+                lhs: result.into(),
+                rhs: self.equality()?.into(),
+                kind: BinaryExpressionKind::BitwiseAnd,
             });
         }
         Ok(result)
@@ -259,7 +309,7 @@ impl<'src> Parser<'src> {
     }
 
     fn relational(&mut self) -> Result<Expression<'src>> {
-        let mut result = self.term()?;
+        let mut result = self.bitwise_shift()?;
         while self.is_next(&[
             Token::Less,
             Token::Greater,
@@ -272,6 +322,26 @@ impl<'src> Parser<'src> {
                     Token::Greater => BinaryExpressionKind::Greater,
                     Token::LessEqual => BinaryExpressionKind::LessEqual,
                     Token::GreaterEqual => BinaryExpressionKind::GreaterEqual,
+                    _ => unreachable!(),
+                },
+                None => unreachable!(),
+            };
+            result = Expression::Binary(BinaryExpression {
+                kind,
+                lhs: result.into(),
+                rhs: self.bitwise_shift()?.into(),
+            });
+        }
+        Ok(result)
+    }
+
+    fn bitwise_shift(&mut self) -> Result<Expression<'src>> {
+        let mut result = self.term()?;
+        while self.is_next(&[Token::GreaterGreater, Token::LessLess]) {
+            let kind = match self.previous {
+                Some(token) => match token {
+                    Token::GreaterGreater => BinaryExpressionKind::BitwiseShr,
+                    Token::LessLess => BinaryExpressionKind::BitwiseShl,
                     _ => unreachable!(),
                 },
                 None => unreachable!(),
@@ -328,7 +398,13 @@ impl<'src> Parser<'src> {
     }
 
     fn unary(&mut self) -> Result<Expression<'src>> {
-        if self.is_next(&[Token::Minus, Token::Bang, Token::Ampersand, Token::Star]) {
+        if self.is_next(&[
+            Token::Minus,
+            Token::Bang,
+            Token::Ampersand,
+            Token::Star,
+            Token::Tilde,
+        ]) {
             let op = self.previous.unwrap();
             let expr = self.unary()?;
             return Ok(Expression::Unary(UnaryExpression {
@@ -567,6 +643,7 @@ pub struct CallExpression<'src> {
 pub struct AssignExpression<'src> {
     pub lhs: Box<Expression<'src>>,
     pub rhs: Box<Expression<'src>>,
+    pub op: Token<'src>,
 }
 
 #[derive(Debug, Clone)]
@@ -613,6 +690,11 @@ pub enum BinaryExpressionKind {
     Greater,
     LessEqual,
     GreaterEqual,
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseAnd,
+    BitwiseShl,
+    BitwiseShr,
     Strcat,
 }
 
