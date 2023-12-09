@@ -16,6 +16,9 @@ This project is my second venture into the field of programming language design.
 - operators for the said types
   - `==`, `!=`, `<`, `>`, `<=`, `>=`
   - `+`, `-`, `*`, `/`, `%`
+  - `+=`, `-=`, `*=`, `/=`, `%=` (compound assignment)
+  - `&`, `|`, `^`, `~`, `<<`, `>>` (bitwise and/or/xor/not/shift (left|right))
+  - `&=`, `|=`, `^=`, `<<=`, `>>=` (bitwise compound assignment)
   - `&&`, `||`, `!` (logical and/or/not)
   - `++` (string concatenation)
   - `&`, `*`, `->` (for pointers)
