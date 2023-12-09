@@ -725,6 +725,17 @@ impl<'src> From<&'src str> for Object<'src> {
     }
 }
 
+/// A fixed-size stack is needed because the stack
+/// could contain Object::Ptr, which in turn could
+/// point to other elements on the stack, effecti-
+/// vely making the entire structure self-referen-
+/// tial. With this stack, we prevent reallocation
+/// which would be bound to happen had we used the
+/// built-in Vec, and hence the pointers never get
+/// invalidated. The alternative was to use Pin to
+/// pin the stack and the objects it contains, but
+/// this was turning the whole codebase into a gi-
+/// ant mess, so I wrote a stack that doesn't grow
 #[derive(Debug)]
 struct Stack<T> {
     data: *mut T,
