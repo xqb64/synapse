@@ -569,7 +569,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                     self.clone(),
                     variable.clone(),
                     is_specialized,
-                    self.op.clone(),
+                    self.op,
                 )?;
             }
 
@@ -578,7 +578,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                     unary.clone(),
                     (*self.rhs).clone(),
                     is_specialized,
-                    self.op.clone(),
+                    self.op,
                 )?;
             }
 
@@ -587,7 +587,7 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                     getexp.clone(),
                     (*self.rhs).clone(),
                     is_specialized,
-                    self.op.clone(),
+                    self.op,
                 )?;
             }
 
