@@ -124,14 +124,24 @@ where
         }
     }
 
+    /// Handles 'Opcode::Const(f64)' by constructing
+    /// an Object::Number, with the f64 as its value,
+    /// and pushing it on the stack.
     fn handle_op_const(&mut self, n: f64) {
         self.stack.push(n.into());
     }
 
+    /// Handles 'Opcode::Str(&str)' by constructing
+    /// an Object::String, with the &str as its va-
+    /// lue, and pushing it on the stack.
     fn handle_op_str(&mut self, s: &'src str) {
         self.stack.push(s.into());
     }
 
+    /// Handles 'Opcode::Strcat' by popping two obj-
+    /// ects off the stack (expected to be strings),
+    /// concatenating them into a new string object,
+    /// and pushing the new object on the stack.
     fn handle_op_strcat(&mut self) -> Result<()> {
         let b = pop!(self.stack);
         let a = pop!(self.stack);
@@ -149,6 +159,8 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::Print' by popping an obj-
+    /// ect off the stack and printing it out.
     fn handle_op_print(&mut self) {
         let obj = pop!(self.stack);
         if cfg!(debug_assertions) {
@@ -157,74 +169,122 @@ where
         println!("{:?}", obj);
     }
 
+    /// Handles 'Opcode::Add' by popping two obj-
+    /// ects off the stack, adding them together,
+    /// and pushing the result back on the stack.
     fn handle_op_add(&mut self) -> Result<()> {
         binop_arithmetic!(self, +);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::Sub' by popping two obj-
+    /// ects off the stack, subtracting them, and
+    /// pushing the result back on the stack.
     fn handle_op_sub(&mut self) -> Result<()> {
         binop_arithmetic!(self, -);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::Mul' by popping two obj-
+    /// ects off the stack, multiplying them, and
+    /// pushing the result back on the stack.
     fn handle_op_mul(&mut self) -> Result<()> {
         binop_arithmetic!(self, *);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::Div' by popping two obj-
+    /// ects off the stack, dividing them, and p-
+    /// ushing the result back on the stack.
     fn handle_op_div(&mut self) -> Result<()> {
         binop_arithmetic!(self, /);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::Mod' by popping two obj-
+    /// ects off the stack, mod-ing them, and pu-
+    /// shing the result back on the stack.
     fn handle_op_mod(&mut self) -> Result<()> {
         binop_arithmetic!(self, %);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::BitAnd' by popping two obj-
+    /// ects off the stack, bitwise-anding them, and
+    /// pushing the result back on the stack.
     fn handle_op_bitand(&mut self) -> Result<()> {
         binop_arithmetic!(self, &);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::BitOr' by popping two obj-
+    /// ects off the stack, bitwise-oring them, and
+    /// pushing the result back on the stack.
     fn handle_op_bitor(&mut self) -> Result<()> {
         binop_arithmetic!(self, |);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::BitXor' by popping two obj-
+    /// ects off the stack, bitwise-xoring them, and
+    /// pushing the result back on the stack.
     fn handle_op_bitxor(&mut self) -> Result<()> {
         binop_arithmetic!(self, ^);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::BitShl' by popping two obje-
+    /// cts off the stack, performing the bitwise shl
+    /// operation on the first operand using the sec-
+    /// ond operand as the shift amount, and pushing
+    /// the result back on the stack.
     fn handle_op_bitshl(&mut self) -> Result<()> {
         binop_arithmetic!(self, <<);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::BitShr' by popping two obje-
+    /// cts off the stack, performing the bitwise shr
+    /// operation on the first operand using the sec-
+    /// ond operand as the shift amount, and pushing
+    /// the result back on the stack.
     fn handle_op_bitshr(&mut self) -> Result<()> {
         binop_arithmetic!(self, >>);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::BitNot' by popping an obje-
+    /// ct off the stack, performing the bitwise not
+    /// operation on it, and pushing the result back
+    /// on the stack.
     fn handle_op_bitnot(&mut self) -> Result<()> {
+        let obj = pop!(self.stack);
+        self.stack.push((!obj)?);
+
         Ok(())
     }
 
+    /// Handles 'Opcode::False' by constructing an
+    /// Object::Bool, with false as its value, and
+    /// pushing it on the stack.
     fn handle_op_false(&mut self) {
         self.stack.push(false.into());
     }
 
+    /// Handles 'Opcode::Not' by popping an object
+    /// off the stack, performing the logical not
+    /// operation on it, and pushing the result back
+    /// on the stack.
     fn handle_op_not(&mut self) -> Result<()> {
         let obj = pop!(self.stack);
         self.stack.push((!obj)?);
@@ -232,6 +292,10 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::Neg' by popping an object
+    /// off the stack, performing the logical negate
+    /// operation on it, and pushing the result back
+    /// on the stack.
     fn handle_op_neg(&mut self) -> Result<()> {
         let obj = pop!(self.stack);
         self.stack.push((-obj)?);
@@ -239,32 +303,54 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::Null' by constructing an
+    /// Object::Null and pushing it on the stack.
     fn handle_op_null(&mut self) {
         self.stack.push(Object::Null);
     }
 
+    /// Handles 'Opcode::Eq' by popping two objects
+    /// off the stack, performing the equality check
+    /// on them, and pushing the boolean result back
+    /// on the stack.
     fn handle_op_eq(&mut self) {
         let b = pop!(self.stack);
         let a = pop!(self.stack);
         self.stack.push((a == b).into())
     }
 
+    /// Handles 'Opcode::Lt' by popping two objects
+    /// off the stack, performing the less-than check
+    /// on them, and pushing the boolean result back
+    /// on the stack.
     fn handle_op_lt(&mut self) -> Result<()> {
         binop_relational!(self, <);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::Gt' by popping two objects
+    /// off the stack, performing the greater-than
+    /// check on them, and pushing the boolean result
+    /// back on the stack.
     fn handle_op_gt(&mut self) -> Result<()> {
         binop_relational!(self, >);
 
         Ok(())
     }
 
+    /// Handles 'Opcode::Jmp(usize)' by setting the
+    /// instruction pointer to the address provided
+    /// in the opcode.
     fn handle_op_jmp(&mut self, addr: usize) {
         self.ip = addr;
     }
 
+    /// Handles 'Opcode::Jz(usize)' by popping an
+    /// object off the stack (expected to be bool),
+    /// and setting the instruction pointer to the
+    /// address provided in the opcode, if and only
+    /// if the popped object was falsey.
     fn handle_op_jz(&mut self, addr: usize) {
         let item = pop!(self.stack);
         if let Object::Bool(_b @ false) = item {
@@ -272,6 +358,12 @@ where
         }
     }
 
+    /// Handles 'Opcode::Call(usize)' by pushing a
+    /// BytecodePtr object on the frame ptr stack.
+    /// The object will point to the next instruc-
+    /// tion that comes after the current instruc-
+    /// tion pointer, and its location will be the
+    /// size of the stack - n.
     fn handle_op_call(&mut self, n: usize) {
         self.frame_ptrs.push(BytecodePtr {
             ptr: self.ip + 1,
@@ -279,22 +371,37 @@ where
         });
     }
 
+    /// Handles 'Opcode::Ret' by popping a BytecodePtr
+    /// object off of the frame ptr stack, and setting
+    /// the instruction pointer to the address contai-
+    /// ned within the object.
     fn handle_op_ret(&mut self) {
         let retaddr = pop!(self.frame_ptrs);
         let BytecodePtr { ptr, location: _ } = retaddr;
         self.ip = ptr;
     }
 
+    /// Handles 'Opcode::Deepget(usize)' by getting an
+    /// object at index 'idx' (relative to the current
+    /// frame pointer), and pushing it on the stack.
     fn handle_op_deepget(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         self.stack.push(unsafe { (*ptr).clone() });
     }
 
+    /// Handles 'Opcode::DeepgetPtr(usize)' by getting
+    /// the pointer to the object at index 'idx' (rel-
+    /// ative to the current frame pointer), and push-
+    /// ing it on the stack.
     fn handle_op_deepgetptr(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         self.stack.push(Object::Ptr(ptr));
     }
 
+    /// Handles 'Opcode::Deepset(usize)' by popping an
+    /// object off the stack and setting the object at
+    /// index 'idx' (relative to the current frame ptr)
+    /// to the popped object.
     fn handle_op_deepset(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         unsafe {
@@ -302,6 +409,9 @@ where
         }
     }
 
+    /// Handles 'Opcode::Deref' by popping an object off
+    /// the stack, dereferencing it, and pushing the re-
+    /// sult back on the stack.
     fn handle_op_deref(&mut self) -> Result<()> {
         match pop!(self.stack) {
             Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
@@ -311,6 +421,9 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::Derefset' by popping two objects
+    /// off the stack (the value and the pointer), deref-
+    /// erencing the pointer, and setting it to the value.
     fn handle_op_derefset(&mut self) -> Result<()> {
         let item = pop!(self.stack);
         match pop!(self.stack) {
@@ -323,6 +436,10 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::Getattr(&str)' by popping an object
+    /// off the stack (expected to be a struct), looking up the
+    /// member with the &str value contained in the opcode, and
+    /// pushing it on the stack.
     fn handle_op_getattr(&mut self, member: &str) -> Result<()> {
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow().members.get(member) {
@@ -338,6 +455,10 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::GetattrPtr(&str)' by popping an object
+    /// off the stack (expected to be a struct), looking up the
+    /// member with the &str value contained in the opcode, and
+    /// pushing the pointer to it on the stack.
     fn handle_op_getattrptr(&mut self, member: &str) -> Result<()> {
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow_mut().members.get_mut(member) {
@@ -353,6 +474,11 @@ where
         Ok(())
     }
 
+    /// Handles 'Opcode::Setattr(&str)' by popping two objects
+    /// off the stack (expected to be a value and a struct, re-
+    /// spectively), setting the member with the &str value co-
+    /// ntained in the opcode to the popped value, and pushing
+    /// the struct back on the stack.
     fn handle_op_setattr(&mut self, member: &'src str) {
         let value = pop!(self.stack);
         let structobj = pop!(self.stack);
@@ -362,6 +488,10 @@ where
         }
     }
 
+    /// Handles 'Opcode::Struct(&str)' by constructing an
+    /// Object::Struct (using the &str value contained in
+    /// the opcode as the naame, and with an empty members
+    /// HashMap), and pushing it on the stack.
     fn handle_op_struct(&mut self, name: &'src str) {
         let structobj = Object::Struct(Rc::new(
             (StructObject {
@@ -373,11 +503,14 @@ where
         self.stack.push(structobj);
     }
 
+    /// Handles 'Opcode::Dup' by cloning the top of the stack.
     fn handle_op_dup(&mut self) {
         let top = self.stack.get_raw(self.stack.tos - 1);
         self.stack.push(unsafe { (*top).clone() });
     }
 
+    /// Handles 'Opcode::Pop(usize)' by popping
+    /// 'popcount' objects off of the stack.
     fn handle_op_pop(&mut self, popcount: usize) {
         for _ in 0..popcount {
             pop!(self.stack);
