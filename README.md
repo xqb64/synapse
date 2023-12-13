@@ -62,8 +62,8 @@ NOTE: The above program has been the go-to benchmark throughout the development 
 ```
 $ hyperfine --runs 5 './target/release/synapse benches/cases/fib40.syn'
 Benchmark 1: target/release/synapse benches/cases/fib40.syn
-  Time (mean ± σ):     14.460 s ±  0.136 s    [User: 14.389 s, System: 0.023 s]
-  Range (min … max):   14.314 s … 14.681 s    5 runs
+  Time (mean ± σ):     13.638 s ±  0.023 s    [User: 13.637 s, System: 0.000 s]
+  Range (min … max):   13.618 s … 13.667 s    5 runs
 ```
 
 A mandatory comparison to Python is in order:
