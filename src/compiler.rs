@@ -1,9 +1,9 @@
 use crate::parser::{
     AssignExpression, BinaryExpression, BinaryExpressionKind, BlockStatement, BreakStatement,
-    CallExpression, ContinueStatement, Expression, ExpressionStatement, FnStatement, GetExpression,
-    IfStatement, Literal, LiteralExpression, LogicalExpression, PrintStatement, ReturnStatement,
-    Statement, StructExpression, StructInitializerExpression, StructStatement, UnaryExpression,
-    VariableExpression, WhileStatement,
+    CallExpression, ContinueStatement, Expression, ExpressionStatement, FnStatement, ForStatement,
+    GetExpression, IfStatement, Literal, LiteralExpression, LogicalExpression, PrintStatement,
+    ReturnStatement, Statement, StructExpression, StructInitializerExpression, StructStatement,
+    UnaryExpression, VariableExpression, WhileStatement,
 };
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
@@ -191,6 +191,7 @@ impl<'src> Codegen<'src> for Statement<'src> {
             Statement::Return(return_statement) => return_statement.codegen(compiler)?,
             Statement::If(if_statement) => if_statement.codegen(compiler)?,
             Statement::While(while_statement) => while_statement.codegen(compiler)?,
+            Statement::For(for_statement) => for_statement.codegen(compiler)?,
             Statement::Break(break_statement) => break_statement.codegen(compiler)?,
             Statement::Continue(continue_statement) => continue_statement.codegen(compiler)?,
             Statement::Expression(expr_statement) => expr_statement.codegen(compiler)?,
@@ -297,6 +298,58 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
         compiler.loop_starts.pop();
 
         compiler.patch_jmp(jz_idx);
+
+        Ok(())
+    }
+}
+
+impl<'src> Codegen<'src> for ForStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        if let Expression::Assign(assignment) = self.initializer.clone() {
+            if let Expression::Variable(variable) = &*assignment.lhs {
+                compiler.locals.push(variable.value);
+                assignment.rhs.codegen(compiler)?;
+
+                let loop_start = compiler.bytecode.len() - 1;
+                compiler.loop_starts.push(loop_start);
+                let break_count = compiler.breaks.len();
+
+                self.condition.codegen(compiler)?;
+
+                let exit_jump = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
+
+                let jump_over_advancement = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
+
+                let loop_continuation = compiler.bytecode.len() - 1;
+
+                self.advancement.codegen(compiler)?;
+
+                compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
+
+                compiler.patch_jmp(jump_over_advancement);
+
+                if let Some(start) = compiler.loop_starts.last_mut() {
+                    *start = loop_continuation;
+                }
+
+                self.body.codegen(compiler)?;
+
+                compiler.emit_opcodes(&[Opcode::Jmp(loop_continuation)]);
+
+                let pop = compiler.breaks.len() - break_count;
+                for _ in 0..pop {
+                    let break_jump = compiler.breaks.pop().unwrap();
+                    compiler.patch_jmp(break_jump);
+                }
+
+                compiler.locals.pop();
+                compiler.loop_starts.pop();
+
+                compiler.patch_jmp(exit_jump);
+
+                compiler.emit_opcodes(&[Opcode::Pop(1)]);
+            }
+        }
 
         Ok(())
     }

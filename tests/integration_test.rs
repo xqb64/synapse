@@ -156,6 +156,15 @@ fn _while() {
 }
 
 #[test]
+fn _for() {
+    let (path, expected) = (
+        "tests/cases/for.syn",
+        object_vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+    );
+    run_test!(path, expected);
+}
+
+#[test]
 fn _while_pop() {
     let (path, expected) = (
         "tests/cases/while_pop.syn",

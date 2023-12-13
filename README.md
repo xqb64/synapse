@@ -25,7 +25,9 @@ This project is my second venture into the field of programming language design.
   - `.` (member access)
 - control flow
   - `if`, `else`
-  - `while` (and `break` and `continue`, of course)
+  - `while`
+  - `for`
+  - `break` and `continue`
 - functions
   - `main` is the entry-point
   - `return` is mandatory

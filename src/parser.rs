@@ -79,6 +79,8 @@ impl<'src> Parser<'src> {
             self.parse_if_statement()
         } else if self.is_next(&[Token::While]) {
             self.parse_while_statement()
+        } else if self.is_next(&[Token::For]) {
+            self.parse_for_statement()
         } else if self.is_next(&[Token::Break]) {
             self.parse_break_statement()
         } else if self.is_next(&[Token::Continue]) {
@@ -144,6 +146,23 @@ impl<'src> Parser<'src> {
         let body = self.parse_statement()?;
         Ok(Statement::While(WhileStatement {
             condition,
+            body: body.into(),
+        }))
+    }
+
+    fn parse_for_statement(&mut self) -> Result<Statement<'src>> {
+        self.consume(Token::LeftParen);
+        let initializer = self.parse_expression()?;
+        self.consume(Token::Semicolon);
+        let condition = self.parse_expression()?;
+        self.consume(Token::Semicolon);
+        let advancement = self.parse_expression()?;
+        self.consume(Token::RightParen);
+        let body = self.parse_statement()?;
+        Ok(Statement::For(ForStatement {
+            initializer,
+            condition,
+            advancement,
             body: body.into(),
         }))
     }
@@ -542,6 +561,7 @@ pub enum Statement<'src> {
     Return(ReturnStatement<'src>),
     If(IfStatement<'src>),
     While(WhileStatement<'src>),
+    For(ForStatement<'src>),
     Break(BreakStatement),
     Continue(ContinueStatement),
     Struct(StructStatement<'src>),
@@ -577,6 +597,14 @@ pub struct IfStatement<'src> {
 #[derive(Debug)]
 pub struct WhileStatement<'src> {
     pub condition: Expression<'src>,
+    pub body: Box<Statement<'src>>,
+}
+
+#[derive(Debug)]
+pub struct ForStatement<'src> {
+    pub initializer: Expression<'src>,
+    pub condition: Expression<'src>,
+    pub advancement: Expression<'src>,
     pub body: Box<Statement<'src>>,
 }
 
