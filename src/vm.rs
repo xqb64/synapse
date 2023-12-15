@@ -10,34 +10,33 @@ macro_rules! pop {
 }
 
 macro_rules! binop_arithmetic {
-    ($self:tt, $op:tt) => {
-        {
-            let b = pop!($self.stack);
-            let a = pop!($self.stack);
-            let res = (a $op b);
-            match res {
-                Ok(r) => $self.stack.push(r.into()),
-                Err(e) => bail!(e),
-            }
+    ($self:tt, $op:tt) => {{
+        let b = pop!($self.stack);
+        let a = pop!($self.stack);
+        let res = (a $op b);
+        match res {
+            Ok(r) => $self.stack.push(r.into()),
+            Err(e) => bail!(e),
         }
-    };
+    }};
 }
 
-fn prepare4bitwise(a: f64, b: f64) -> (i32, i32) {
-    (a as i32, b as i32)
+fn prepare4bitwise(a: f64, b: f64) -> (u64, u64) {
+    let clamped_a = a.clamp(0f64, u64::MAX as f64);
+    let clamped_b = b.clamp(0f64, u64::MAX as f64);
+
+    (clamped_a as u64, clamped_b as u64)
 }
 
 macro_rules! binop_relational {
-    ($self:tt, $op:tt) => {
-        {
-            let b = pop!($self.stack);
-            let a = pop!($self.stack);
-            if std::mem::discriminant(&a) != std::mem::discriminant(&b) {
-                bail!("vm: only numbers can be: <, >, <=, >=");
-            }
-            $self.stack.push((a $op b).into());
+    ($self:tt, $op:tt) => {{
+        let b = pop!($self.stack);
+        let a = pop!($self.stack);
+        if std::mem::discriminant(&a) != std::mem::discriminant(&b) {
+            bail!("vm: only numbers can be: <, >, <=, >=");
         }
-    };
+        $self.stack.push((a $op b).into());
+    }};
 }
 
 macro_rules! adjust_idx {

@@ -430,7 +430,7 @@ fn logical(
         a, b, if_a_equals, op, if_b_equals
     );
 
-    let random = rand::random::<u8>();
+    let random = rand::random::<u64>();
     let filename = format!("input_logical_{}.syn", random);
     let dir = std::env::temp_dir();
     let input_file_path = dir.join(filename);
@@ -464,7 +464,7 @@ fn bitwise(
         "#,
         op, left, right,
     );
-    let random = rand::random::<u8>();
+    let random = rand::random::<u64>();
     let filename = format!("input_bitwise_{}.syn", random);
     let dir = std::env::temp_dir();
     let input_file_path = dir.join(filename);
@@ -506,7 +506,7 @@ fn compound_assignment(
         "#,
         start, cond_op, end, op, step,
     );
-    let random = rand::random::<u8>();
+    let random = rand::random::<u64>();
     let filename = format!("input_compound_{}.syn", random);
     let dir = std::env::temp_dir();
     let input_file_path = dir.join(filename);
@@ -542,7 +542,7 @@ fn more_compound_assignment(
         left, op, right,
     );
 
-    let random = rand::random::<u8>();
+    let random = rand::random::<u64>();
     let filename = format!("input_more_compound_{}.syn", random);
     let dir = std::env::temp_dir();
     let input_file_path = dir.join(filename);
