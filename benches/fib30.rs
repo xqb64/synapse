@@ -29,8 +29,8 @@ fn criterion_benchmark_fib30(c: &mut Criterion) -> Result<()> {
         bail!("tokenizer: unexpected token: {}", unrecognized);
     };
     let ast = parser.parse(&mut tokens)?;
-    let bytecode = compiler.compile(&ast)?;
-    let mut vm = VM::new(bytecode);
+    let (bytecode, cp, sp) = compiler.compile(&ast)?;
+    let mut vm = VM::new(bytecode, cp, sp);
 
     c.bench_function("fib 30", |b| b.iter(|| vm.exec()));
 

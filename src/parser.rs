@@ -65,6 +65,8 @@ impl<'src> Parser<'src> {
             self.parse_fn_statement()
         } else if self.is_next(&[Token::Struct]) {
             self.parse_struct_statement()
+        } else if self.is_next(&[Token::Impl]) {
+            self.parse_impl_statement()
         } else {
             bail!("parser: expected a declaration (like 'fn' or 'struct')");
         }
@@ -203,6 +205,26 @@ impl<'src> Parser<'src> {
         };
         self.consume(Token::Comma);
         Ok(member)
+    }
+
+    fn parse_impl_statement(&mut self) -> Result<Statement<'src>> {
+        let name = match self.consume(Token::Identifier("")) {
+            Some(Token::Identifier(ident)) => ident,
+            Some(_) | None => bail!(
+                "parser: expected identifier after 'impl' keyword, got: {}",
+                self.current.unwrap().get_value()
+            ),
+        };
+        self.consume(Token::LeftBrace);
+        let mut methods = vec![];
+        while !self.is_next(&[Token::RightBrace]) {
+            methods.push(match self.parse_declaration() {
+                Ok(method) => method,
+                Err(e) => bail!(e),
+            });
+        }
+
+        Ok(Statement::Impl(ImplStatement { name, methods }))
     }
 
     fn parse_block_statement(&mut self) -> Result<Statement<'src>> {
@@ -448,12 +470,8 @@ impl<'src> Parser<'src> {
                     }
                 }
                 self.consume(Token::RightParen);
-                let name = match expr {
-                    Expression::Variable(v) => v.value,
-                    _ => unimplemented!(),
-                };
                 expr = Expression::Call(CallExpression {
-                    variable: name,
+                    callee: expr.into(),
                     arguments,
                 });
             } else if self.is_next(&[Token::Dot, Token::Arrow]) {
@@ -489,6 +507,7 @@ impl<'src> Parser<'src> {
                 self.parse_variable()
             }
         } else {
+            println!("{:?}", self.current);
             bail!("parser: expected: number, string, (, true, false, null, identifier");
         }
     }
@@ -565,6 +584,7 @@ pub enum Statement<'src> {
     Break(BreakStatement),
     Continue(ContinueStatement),
     Struct(StructStatement<'src>),
+    Impl(ImplStatement<'src>),
     Block(BlockStatement<'src>),
     Expression(ExpressionStatement<'src>),
     Dummy,
@@ -621,6 +641,12 @@ pub struct StructStatement<'src> {
 }
 
 #[derive(Debug)]
+pub struct ImplStatement<'src> {
+    pub name: &'src str,
+    pub methods: Vec<Statement<'src>>,
+}
+
+#[derive(Debug)]
 pub struct BlockStatement<'src> {
     pub body: Vec<Statement<'src>>,
 }
@@ -663,7 +689,7 @@ pub struct BinaryExpression<'src> {
 
 #[derive(Debug, Clone)]
 pub struct CallExpression<'src> {
-    pub variable: &'src str,
+    pub callee: Box<Expression<'src>>,
     pub arguments: Vec<Expression<'src>>,
 }
 

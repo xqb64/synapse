@@ -42,9 +42,9 @@ fn run(path: &str) -> Result<()> {
     };
 
     let ast = parser.parse(&mut tokens)?;
-    let bytecode = compiler.compile(&ast)?;
+    let (bytecode, cp, sp) = compiler.compile(&ast)?;
 
-    let mut vm = VM::new(bytecode);
+    let mut vm = VM::new(bytecode, cp, sp);
     vm.exec()?;
 
     Ok(())

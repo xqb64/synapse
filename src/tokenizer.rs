@@ -39,6 +39,9 @@ pub enum Token<'src> {
     #[token("struct")]
     Struct,
 
+    #[token("impl")]
+    Impl,
+
     #[token("true")]
     True,
 

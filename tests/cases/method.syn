@@ -1,0 +1,20 @@
+struct person {
+  name,
+}
+
+impl person {
+  fn say(self) {
+    self.say_name();
+    return 0;
+  }
+  fn say_name(self) {
+    print "Hello, " ++ self.name ++ ".";
+    return 0;
+  }
+}
+
+fn main() {
+  p = person { name: "John" };
+  p.say();
+  return 0;
+}

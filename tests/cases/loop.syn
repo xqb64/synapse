@@ -1,0 +1,17 @@
+fn main() {
+  x = 0;
+  while (x < 5) {
+    e = 16;
+    a = 32;
+    b = 64;
+    z = x + 1;
+    print z;
+    x += 1;
+    if (x == 2) {
+      egg = 128;
+      spam = 256;
+      continue;
+    }
+  }
+  return 0;
+}
