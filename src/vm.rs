@@ -110,7 +110,6 @@ where
                 Opcode::Setattr(member) => self.handle_op_setattr(member),
                 Opcode::Struct(name) => self.handle_op_struct(name),
                 Opcode::Strcat => self.handle_op_strcat()?,
-                Opcode::Dup => self.handle_op_dup(),
                 Opcode::Pop(popcount) => self.handle_op_pop(*popcount),
                 Opcode::Halt => break Ok(()),
             }
@@ -500,12 +499,6 @@ where
             .into(),
         ));
         self.stack.push(structobj);
-    }
-
-    /// Handles 'Opcode::Dup' by cloning the top of the stack.
-    fn handle_op_dup(&mut self) {
-        let top = self.stack.get_raw(self.stack.tos - 1);
-        self.stack.push(unsafe { (*top).clone() });
     }
 
     /// Handles 'Opcode::Pop(usize)' by popping

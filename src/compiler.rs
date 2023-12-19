@@ -96,7 +96,6 @@ impl<'src> Compiler<'src> {
         unary_expr.expr.codegen(self)?;
 
         if is_specialized {
-            self.emit_opcodes(&[Opcode::Dup]);
             rhs.codegen(self)?;
             self.handle_specialized_operator(operator);
         } else {
@@ -122,7 +121,6 @@ impl<'src> Compiler<'src> {
         }
 
         if is_specialized {
-            self.emit_opcodes(&[Opcode::Dup]);
             self.emit_opcodes(&[Opcode::Getattr(get_expr.member.to_owned().into())]);
             rhs.codegen(self)?;
             self.handle_specialized_operator(operator);
@@ -822,7 +820,6 @@ pub enum Opcode {
     Setattr(Rc<String>),
     Strcat,
     Struct(Rc<String>),
-    Dup,
     Pop(usize),
     Halt,
 }
