@@ -20,6 +20,8 @@ pub struct Compiler<'src> {
     structs: HashMap<&'src str, Vec<&'src str>>,
     breaks: Vec<usize>,
     loop_starts: Vec<usize>,
+    loop_depths: Vec<usize>,
+    depth: usize,
 }
 
 impl Default for Compiler<'_> {
@@ -38,6 +40,8 @@ impl<'src> Compiler<'src> {
             pops: Vec::with_capacity(CAPACITY_MIN),
             breaks: Vec::with_capacity(CAPACITY_MIN),
             loop_starts: Vec::with_capacity(CAPACITY_MIN),
+            loop_depths: Vec::with_capacity(CAPACITY_MIN),
+            depth: 0,
         }
     }
 
@@ -162,6 +166,16 @@ impl<'src> Compiler<'src> {
         self.bytecode.push(Opcode::Pop(*popcount));
     }
 
+    // clean up the stack and locals,
+    // that is everything declared within the loop
+    fn emit_loop_cleanup(&mut self) {
+        if let Some(&last_depth) = self.loop_depths.last() {
+            for i in last_depth + 1..=self.depth {
+                self.emit_opcodes(&[Opcode::Pop(self.pops[i])]);
+            }
+        }
+    }
+
     fn resolve_local(&mut self, name: &'src str) -> (usize, bool) {
         match self.locals.iter().position(|&local| local == name) {
             Some(idx) => (idx, false),
@@ -283,7 +297,11 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
 
         let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFF)]);
 
+        compiler.loop_depths.push(compiler.depth);
+
         self.body.codegen(compiler)?;
+
+        compiler.loop_depths.pop();
 
         compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
 
@@ -330,7 +348,11 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
                     *start = loop_continuation;
                 }
 
+                compiler.loop_depths.push(compiler.depth);
+
                 self.body.codegen(compiler)?;
+
+                compiler.loop_depths.pop();
 
                 compiler.emit_opcodes(&[Opcode::Jmp(loop_continuation)]);
 
@@ -356,7 +378,7 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
 impl<'src> Codegen<'src> for BreakStatement {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         if !compiler.loop_starts.is_empty() {
-            compiler.emit_stack_cleanup();
+            compiler.emit_loop_cleanup();
 
             let break_jump = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFF)]);
             compiler.breaks.push(break_jump);
@@ -373,7 +395,7 @@ impl<'src> Codegen<'src> for ContinueStatement {
         if !compiler.loop_starts.is_empty() {
             let loop_start = compiler.loop_starts.last().copied().unwrap();
 
-            compiler.emit_stack_cleanup();
+            compiler.emit_loop_cleanup();
 
             compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
         } else {
@@ -428,6 +450,7 @@ impl<'src> Codegen<'src> for ReturnStatement<'src> {
 
 impl<'src> Codegen<'src> for BlockStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        compiler.depth += 1;
         compiler.pops.push(0);
 
         for statement in &self.body {
@@ -440,6 +463,8 @@ impl<'src> Codegen<'src> for BlockStatement<'src> {
 
         compiler.emit_stack_cleanup();
         compiler.pops.pop();
+
+        compiler.depth -= 1;
 
         Ok(())
     }

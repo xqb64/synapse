@@ -397,6 +397,12 @@ fn ptr03() {
     run_test!(path, expected);
 }
 
+#[test]
+fn _loop() {
+    let (path, expected) = ("tests/cases/loop.syn", object_vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    run_test!(path, expected);
+}
+
 #[rstest]
 #[case(32, 64, 32, "&&", 64, "Run!")]
 #[case(32, 64, 16, "&&", 64, "Shouldn't run!")]
