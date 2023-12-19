@@ -398,8 +398,8 @@ where
 
     /// Handles 'Opcode::Deepset(usize)' by popping an
     /// object off the stack and setting the object at
-    /// index 'idx' (relative to the current frame ptr)
-    /// to the popped object.
+    /// index 'idx' (relative to the current fp)to the
+    /// popped object.
     fn handle_op_deepset(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         unsafe {
