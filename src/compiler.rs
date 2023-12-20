@@ -13,9 +13,7 @@ use std::collections::HashMap;
 const CAPACITY_MIN: usize = 1024;
 
 pub struct Compiler<'src> {
-    cp: Vec<f64>,
-    sp: Vec<&'src str>,
-    bytecode: Vec<u8>,
+    bytecode: Bytecode<'src>,
     functions: HashMap<&'src str, Function<'src>>,
     locals: Vec<&'src str>,
     pops: Vec<usize>,
@@ -35,9 +33,7 @@ impl Default for Compiler<'_> {
 impl<'src> Compiler<'src> {
     pub fn new() -> Self {
         Compiler {
-            cp: Vec::with_capacity(CAPACITY_MIN),
-            sp: Vec::with_capacity(CAPACITY_MIN),
-            bytecode: Vec::with_capacity(CAPACITY_MIN),
+            bytecode: Bytecode::default(),
             functions: HashMap::with_capacity(CAPACITY_MIN),
             locals: Vec::with_capacity(CAPACITY_MIN),
             structs: HashMap::with_capacity(CAPACITY_MIN),
@@ -49,7 +45,7 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<(&[u8], &[f64], &[&'src str])> {
+    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&Bytecode<'src>> {
         for statement in ast {
             statement.codegen(self)?;
         }
@@ -68,11 +64,7 @@ impl<'src> Compiler<'src> {
 
         self.emit_opcodes(&[Opcode::Halt]);
 
-        Ok((
-            self.bytecode.as_slice(),
-            self.cp.as_slice(),
-            self.sp.as_slice(),
-        ))
+        Ok(&self.bytecode)
     }
 
     fn compile_variable_assignment(
@@ -179,37 +171,37 @@ impl<'src> Compiler<'src> {
     }
 
     fn add_string(&mut self, s: &'src str) -> u32 {
-        match self.sp.iter().position(|&x| x == s) {
+        match self.bytecode.sp.iter().position(|&x| x == s) {
             Some(idx) => idx as u32,
             None => {
-                self.sp.push(s);
-                (self.sp.len() - 1) as u32
+                self.bytecode.sp.push(s);
+                (self.bytecode.sp.len() - 1) as u32
             }
         }
     }
 
     fn add_const(&mut self, n: f64) -> u32 {
-        match self.cp.iter().position(|&x| x == n) {
+        match self.bytecode.cp.iter().position(|&x| x == n) {
             Some(idx) => idx as u32,
             None => {
-                self.cp.push(n);
-                (self.cp.len() - 1) as u32
+                self.bytecode.cp.push(n);
+                (self.bytecode.cp.len() - 1) as u32
             }
         }
     }
 
     fn emit_opcodes(&mut self, opcodes: &[Opcode]) -> usize {
         for opcode in opcodes {
-            self.bytecode.push(*opcode as u8);
+            self.bytecode.code.push(*opcode as u8);
         }
-        self.bytecode.len() - opcodes.len()
+        self.bytecode.code.len() - opcodes.len()
     }
 
     fn emit_u32(&mut self, value: u32) {
-        self.bytecode.push(((value >> 24) & 0xFF) as u8);
-        self.bytecode.push(((value >> 16) & 0xFF) as u8);
-        self.bytecode.push(((value >> 8) & 0xFF) as u8);
-        self.bytecode.push((value & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 24) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 16) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 8) & 0xFF) as u8);
+        self.bytecode.code.push((value & 0xFF) as u8);
     }
 
     fn emit_stack_cleanup(&mut self) {
@@ -240,14 +232,14 @@ impl<'src> Compiler<'src> {
     }
 
     fn patch_jmp(&mut self, idx: usize) {
-        let v = self.bytecode.len() - 1;
-        let opcode = self.bytecode[idx];
+        let v = self.bytecode.code.len() - 1;
+        let opcode = self.bytecode.code[idx];
         match opcode {
             _ if opcode == Opcode::Jmp as u8 || opcode == Opcode::Jz as u8 => {
-                self.bytecode[idx + 1] = ((v >> 24) & 0xFF) as u8;
-                self.bytecode[idx + 2] = ((v >> 16) & 0xFF) as u8;
-                self.bytecode[idx + 3] = ((v >> 8) & 0xFF) as u8;
-                self.bytecode[idx + 4] = (v & 0xFF) as u8;
+                self.bytecode.code[idx + 1] = ((v >> 24) & 0xFF) as u8;
+                self.bytecode.code[idx + 2] = ((v >> 16) & 0xFF) as u8;
+                self.bytecode.code[idx + 3] = ((v >> 8) & 0xFF) as u8;
+                self.bytecode.code[idx + 4] = (v & 0xFF) as u8;
             }
             _ => unreachable!(),
         }
@@ -352,7 +344,7 @@ impl<'src> Codegen<'src> for IfStatement<'src> {
 
 impl<'src> Codegen<'src> for WhileStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
-        let loop_start = compiler.bytecode.len() - 1;
+        let loop_start = compiler.bytecode.code.len() - 1;
 
         compiler.loop_starts.push(loop_start);
         let break_count = compiler.breaks.len();
@@ -392,7 +384,7 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
                 compiler.locals.push(variable.value);
                 assignment.rhs.codegen(compiler)?;
 
-                let loop_start = compiler.bytecode.len() - 1;
+                let loop_start = compiler.bytecode.code.len() - 1;
                 compiler.loop_starts.push(loop_start);
                 let break_count = compiler.breaks.len();
 
@@ -404,7 +396,7 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
                 let jump_over_advancement = compiler.emit_opcodes(&[Opcode::Jmp]);
                 compiler.emit_u32(0xFFFFFFFF);
 
-                let loop_continuation = compiler.bytecode.len() - 1;
+                let loop_continuation = compiler.bytecode.code.len() - 1;
 
                 self.advancement.codegen(compiler)?;
 
@@ -513,7 +505,7 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
                     let f = Function {
                         name: method.name.get_value(),
                         localscount: 0,
-                        location: compiler.bytecode.len(),
+                        location: compiler.bytecode.code.len(),
                         paramcount: method.arguments.len(),
                     };
                     blueprint.methods.insert(method.name.get_value(), f);
@@ -1031,6 +1023,13 @@ pub enum Opcode {
 
 trait Codegen<'src> {
     fn codegen(&self, _compiler: &mut Compiler<'src>) -> Result<()>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Bytecode<'src> {
+    pub code: Vec<u8>,
+    pub cp: Vec<f64>,
+    pub sp: Vec<&'src str>,
 }
 
 #[derive(Debug, Clone)]

@@ -1,4 +1,4 @@
-use crate::compiler::{Blueprint, Function, Opcode};
+use crate::compiler::{Blueprint, Bytecode, Function, Opcode};
 use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -62,12 +62,10 @@ macro_rules! match_opcode {
 }
 
 pub struct VM<'src, 'bytecode> {
-    bytecode: &'bytecode [u8],
+    bytecode: &'bytecode Bytecode<'src>,
     stack: Stack<Object<'src>>,
     frame_ptrs: Stack<BytecodePtr>,
     ip: usize,
-    sp: &'src [&'src str],
-    cp: &'src [f64],
     blueprints: HashMap<&'src str, Blueprint<'src>>,
 }
 
@@ -77,25 +75,21 @@ impl<'src, 'bytecode> VM<'src, 'bytecode>
 where
     'bytecode: 'src,
 {
-    pub fn new(
-        bytecode: &'bytecode [u8],
-        cp: &'src [f64],
-        sp: &'src [&'src str],
-    ) -> VM<'src, 'bytecode> {
+    pub fn new(bytecode: &'bytecode Bytecode<'src>) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
             stack: Stack::with_capacity(STACK_MIN),
             frame_ptrs: Stack::with_capacity(STACK_MIN),
             ip: 0,
-            sp,
-            cp,
             blueprints: HashMap::new(),
         }
     }
 
     pub fn exec(&mut self) -> Result<()> {
+        let code = &self.bytecode.code;
+
         loop {
-            let opcode = unsafe { *self.bytecode.get_unchecked(self.ip) };
+            let opcode = unsafe { *code.get_unchecked(self.ip) };
 
             if cfg!(debug_assertions) {
                 println!("current instruction: {:?}", Opcode::from(opcode));
@@ -154,7 +148,7 @@ where
     }
 
     fn read_u32(&mut self) -> u32 {
-        let bytes = &self.bytecode[self.ip + 1..=self.ip + 4];
+        let bytes = &self.bytecode.code[self.ip + 1..=self.ip + 4];
         let n = u32::from_be_bytes(bytes.try_into().unwrap());
 
         self.ip += 4;
@@ -166,7 +160,7 @@ where
     /// an Object::Number, with the f64 as its value,
     /// and pushing it on the stack.
     fn handle_op_const(&mut self) {
-        let n = self.cp[self.read_u32() as usize];
+        let n = self.bytecode.cp[self.read_u32() as usize];
         self.stack.push(n.into());
     }
 
@@ -174,7 +168,7 @@ where
     /// an Object::String, with the &str as its va-
     /// lue, and pushing it on the stack.
     fn handle_op_str(&mut self) {
-        let s = self.sp[self.read_u32() as usize];
+        let s = self.bytecode.sp[self.read_u32() as usize];
         self.stack.push(s.into());
     }
 
@@ -422,7 +416,7 @@ where
             bail!("vm: tried to call a method on a non-struct");
         };
 
-        let name = self.sp[self.read_u32() as usize];
+        let name = self.bytecode.sp[self.read_u32() as usize];
 
         if let Some(blueprint) = self.blueprints.get(object_type) {
             if let Some(method) = blueprint.methods.get(name) {
@@ -515,7 +509,7 @@ where
     /// member with the &str value contained in the opcode, and
     /// pushing it on the stack.
     fn handle_op_getattr(&mut self) -> Result<()> {
-        let member = self.sp[self.read_u32() as usize];
+        let member = self.bytecode.sp[self.read_u32() as usize];
 
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow().members.get(member) {
@@ -536,7 +530,7 @@ where
     /// member with the &str value contained in the opcode, and
     /// pushing the pointer to it on the stack.
     fn handle_op_getattrptr(&mut self) -> Result<()> {
-        let member = self.sp[self.read_u32() as usize];
+        let member = self.bytecode.sp[self.read_u32() as usize];
 
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow_mut().members.get_mut(member) {
@@ -558,7 +552,7 @@ where
     /// ntained in the opcode to the popped value, and pushing
     /// the struct back on the stack.
     fn handle_op_setattr(&mut self) {
-        let member = self.sp[self.read_u32() as usize];
+        let member = self.bytecode.sp[self.read_u32() as usize];
 
         let value = pop!(self.stack);
         let structobj = pop!(self.stack);
@@ -573,7 +567,7 @@ where
     /// the opcode as the naame, and with an empty members
     /// HashMap), and pushing it on the stack.
     fn handle_op_struct(&mut self) {
-        let name = self.sp[self.read_u32() as usize];
+        let name = self.bytecode.sp[self.read_u32() as usize];
         let structobj = Object::Struct(Rc::new(
             (StructObject {
                 members: HashMap::new(),
@@ -589,19 +583,19 @@ where
         let member_count = self.read_u32();
 
         let mut bp = Blueprint {
-            name: self.sp[blueprint_name_idx as usize],
+            name: self.bytecode.sp[blueprint_name_idx as usize],
             members: Vec::new(),
             methods: HashMap::new(),
         };
 
         for _ in 0..member_count {
             let member_name_idx = self.read_u32();
-            let member_name = self.sp[member_name_idx as usize];
+            let member_name = self.bytecode.sp[member_name_idx as usize];
             bp.members.push(member_name);
         }
 
         self.blueprints
-            .insert(self.sp[blueprint_name_idx as usize], bp);
+            .insert(self.bytecode.sp[blueprint_name_idx as usize], bp);
     }
 
     fn handle_op_impl(&mut self) {
@@ -614,7 +608,7 @@ where
             let location = self.read_u32();
 
             let f = Function {
-                name: self.sp[method_name_idx as usize],
+                name: self.bytecode.sp[method_name_idx as usize],
                 paramcount: paramcount as usize,
                 location: location as usize,
                 localscount: 0,
@@ -622,7 +616,7 @@ where
 
             if let Some(bp) = self
                 .blueprints
-                .get_mut(self.sp[blueprint_name_idx as usize])
+                .get_mut(self.bytecode.sp[blueprint_name_idx as usize])
             {
                 bp.methods.insert(f.name, f);
             }
