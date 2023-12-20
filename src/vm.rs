@@ -65,7 +65,7 @@ pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode Bytecode<'src>,
     stack: Stack<Object<'src>>,
     frame_ptrs: Stack<BytecodePtr>,
-    ip: usize,
+    ip: *const u8,
     blueprints: HashMap<&'src str, Blueprint<'src>>,
 }
 
@@ -80,16 +80,19 @@ where
             bytecode,
             stack: Stack::with_capacity(STACK_MIN),
             frame_ptrs: Stack::with_capacity(STACK_MIN),
-            ip: 0,
+            ip: std::ptr::null(),
             blueprints: HashMap::new(),
         }
     }
 
     pub fn exec(&mut self) -> Result<()> {
-        let code = &self.bytecode.code;
+        let start = self.bytecode.code.as_ptr();
+        let end = unsafe { start.add(self.bytecode.code.len()) };
 
-        loop {
-            let opcode = unsafe { *code.get_unchecked(self.ip) };
+        self.ip = start;
+
+        while self.ip != end {
+            let opcode = unsafe { *self.ip };
 
             if cfg!(debug_assertions) {
                 println!("current instruction: {:?}", Opcode::from(opcode));
@@ -135,7 +138,7 @@ where
                 Impl => self.handle_op_impl(),
                 Strcat => self.handle_op_strcat()?,
                 Pop => self.handle_op_pop(),
-                Halt => break Ok(()),
+                Halt => break,
                 Panic => panic!("vm: raw byte"),
             );
 
@@ -143,15 +146,18 @@ where
                 self.stack.print_elements();
             }
 
-            self.ip += 1;
+            self.ip = unsafe { self.ip.add(1) };
         }
+
+        Ok(())
     }
 
+    #[inline(always)]
     fn read_u32(&mut self) -> u32 {
-        let bytes = &self.bytecode.code[self.ip + 1..=self.ip + 4];
-        let n = u32::from_be_bytes(bytes.try_into().unwrap());
+        let bytes = unsafe { self.ip.add(1) };
+        let n = u32::from_be_bytes(unsafe { *(bytes as *const [u8; 4]) });
 
-        self.ip += 4;
+        self.ip = unsafe { self.ip.add(4) };
 
         n
     }
@@ -377,7 +383,7 @@ where
     /// instruction pointer to the address provided
     /// in the opcode.
     fn handle_op_jmp(&mut self) {
-        self.ip = self.read_u32() as usize;
+        self.ip = unsafe { self.bytecode.code.as_ptr().add(self.read_u32() as usize) };
     }
 
     /// Handles 'Opcode::Jz(usize)' by popping an
@@ -389,7 +395,7 @@ where
         let addr = self.read_u32() as usize;
         let item = pop!(self.stack);
         if let Object::Bool(_b @ false) = item {
-            self.ip = addr;
+            self.ip = unsafe { self.bytecode.code.as_ptr().add(addr) };
         }
     }
 
@@ -402,7 +408,7 @@ where
     fn handle_op_call(&mut self) {
         let n = self.read_u32() as usize;
         self.frame_ptrs.push(BytecodePtr {
-            ptr: self.ip + 5,
+            ptr: unsafe { self.ip.add(5) },
             location: self.stack.len() - n,
         });
     }
@@ -425,7 +431,7 @@ where
                     location: self.stack.len() - method.paramcount,
                 });
 
-                self.ip = method.location - 1;
+                self.ip = unsafe { self.bytecode.code.as_ptr().add(method.location - 1) };
             } else {
                 bail!("vm: struct '{}' has no method '{}'", object_type, name);
             }
@@ -652,7 +658,7 @@ pub struct StructObject<'src> {
 
 #[derive(Debug, Copy, Clone)]
 pub struct BytecodePtr {
-    ptr: usize,
+    ptr: *const u8,
     location: usize,
 }
 
