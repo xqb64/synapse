@@ -403,6 +403,12 @@ fn _loop() {
     run_test!(path, expected);
 }
 
+#[test]
+fn method() {
+    let (path, expected) = ("tests/cases/method.syn", object_vec!["Hello, John."]);
+    run_test!(path, expected);
+}
+
 #[rstest]
 #[case(32, 64, 32, "&&", 64, "Run!")]
 #[case(32, 64, 16, "&&", 64, "Shouldn't run!")]

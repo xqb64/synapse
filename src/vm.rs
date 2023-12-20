@@ -421,11 +421,11 @@ where
         if let Some(blueprint) = self.blueprints.get(object_type) {
             if let Some(method) = blueprint.methods.get(name) {
                 self.frame_ptrs.push(BytecodePtr {
-                    ptr: self.ip + 4,
+                    ptr: self.ip,
                     location: self.stack.len() - method.paramcount,
                 });
 
-                self.ip = method.location;
+                self.ip = method.location - 1;
             } else {
                 bail!("vm: struct '{}' has no method '{}'", object_type, name);
             }
