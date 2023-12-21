@@ -508,21 +508,7 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
                         location: compiler.bytecode.code.len() - 1 + 6,
                         paramcount: method.arguments.len(),
                     };
-                    println!("f.paramcount: {}", f.paramcount);
                     blueprint.methods.insert(method.name.get_value(), f);
-
-                    let len = compiler.bytecode.code.len();
-
-                    println!("last: {:?}", Opcode::from(compiler.bytecode.code[len - 1]));
-
-                    println!(
-                        "{:?}",
-                        compiler.bytecode.code[..]
-                            .iter()
-                            .map(|x| Opcode::from(*x))
-                            .collect::<Vec<Opcode>>()
-                    );
-
                     method.codegen(compiler)?;
                 }
             }
