@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 macro_rules! pop {
     ($stack:expr) => {{
-        $stack.pop()
+        $stack.pop().unwrap()
     }};
 }
 
@@ -41,7 +41,7 @@ macro_rules! binop_relational {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        let BytecodePtr { ptr: _, location } = unsafe { *$self.frame_ptrs.last() };
+        let BytecodePtr { ptr: _, location } = $self.frame_ptrs.last().unwrap();
         location + $index
     }};
 }
@@ -63,9 +63,9 @@ macro_rules! match_opcode {
 
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode Bytecode<'src>,
-    stack: Stack<Object<'src>>,
-    frame_ptrs: Stack<BytecodePtr>,
-    ip: *const u8,
+    stack: Vec<Object<'src>>,
+    frame_ptrs: Vec<BytecodePtr>,
+    ip: usize,
     blueprints: HashMap<&'src str, Blueprint<'src>>,
 }
 
@@ -78,21 +78,16 @@ where
     pub fn new(bytecode: &'bytecode Bytecode<'src>) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
-            stack: Stack::with_capacity(STACK_MIN),
-            frame_ptrs: Stack::with_capacity(STACK_MIN),
-            ip: std::ptr::null(),
+            stack: Vec::with_capacity(STACK_MIN),
+            frame_ptrs: Vec::with_capacity(STACK_MIN),
+            ip: 0,
             blueprints: HashMap::new(),
         }
     }
 
     pub fn exec(&mut self) -> Result<()> {
-        let start = self.bytecode.code.as_ptr();
-        let end = unsafe { start.add(self.bytecode.code.len()) };
-
-        self.ip = start;
-
-        while self.ip != end {
-            let opcode = unsafe { *self.ip };
+        loop {
+            let opcode = self.bytecode.code[self.ip];
 
             if cfg!(debug_assertions) {
                 println!("current instruction: {:?}", Opcode::from(opcode));
@@ -143,21 +138,32 @@ where
             );
 
             if cfg!(debug_assertions) {
-                self.stack.print_elements();
+                self.print_stack();
             }
 
-            self.ip = unsafe { self.ip.add(1) };
+            self.ip += 1;
         }
 
         Ok(())
     }
 
+    fn print_stack(&self) {
+        print!("stack: [");
+        for (i, item) in self.stack.iter().enumerate() {
+            print!("{:?}", item);
+            if i < self.stack.len() - 1 {
+                print!(", ");
+            }
+        }
+        println!("]");
+    }
+
     #[inline(always)]
     fn read_u32(&mut self) -> u32 {
-        let bytes = unsafe { self.ip.add(1) };
-        let n = u32::from_be_bytes(unsafe { *(bytes as *const [u8; 4]) });
+        let bytes = &self.bytecode.code[self.ip + 1..self.ip + 5];
+        let n = u32::from_be_bytes(bytes.try_into().unwrap());
 
-        self.ip = unsafe { self.ip.add(4) };
+        self.ip += 4;
 
         n
     }
@@ -383,7 +389,7 @@ where
     /// instruction pointer to the address provided
     /// in the opcode.
     fn handle_op_jmp(&mut self) {
-        self.ip = unsafe { self.bytecode.code.as_ptr().add(self.read_u32() as usize) };
+        self.ip = self.read_u32() as usize;
     }
 
     /// Handles 'Opcode::Jz(usize)' by popping an
@@ -395,7 +401,7 @@ where
         let addr = self.read_u32() as usize;
         let item = pop!(self.stack);
         if let Object::Bool(_b @ false) = item {
-            self.ip = unsafe { self.bytecode.code.as_ptr().add(addr) };
+            self.ip = addr;
         }
     }
 
@@ -408,13 +414,13 @@ where
     fn handle_op_call(&mut self) {
         let n = self.read_u32() as usize;
         self.frame_ptrs.push(BytecodePtr {
-            ptr: unsafe { self.ip.add(5) },
+            ptr: self.ip + 5,
             location: self.stack.len() - n,
         });
     }
 
     fn handle_op_call_method(&mut self) -> Result<()> {
-        let object = self.stack.peek();
+        let object = self.stack.last().unwrap();
 
         let object_type = if let Object::Struct(structobj) = object {
             structobj.borrow().name
@@ -431,7 +437,7 @@ where
                     location: self.stack.len() - method.paramcount,
                 });
 
-                self.ip = unsafe { self.bytecode.code.as_ptr().add(method.location - 1) };
+                self.ip = method.location - 1;
             } else {
                 bail!("vm: struct '{}' has no method '{}'", object_type, name);
             }
@@ -457,8 +463,8 @@ where
     /// frame pointer), and pushing it on the stack.
     fn handle_op_deepget(&mut self) {
         let idx = self.read_u32() as usize;
-        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
-        self.stack.push(unsafe { (*ptr).clone() });
+        let obj = self.stack.get(adjust_idx!(self, idx)).unwrap();
+        self.stack.push(obj.clone());
     }
 
     /// Handles 'Opcode::DeepgetPtr(usize)' by getting
@@ -467,8 +473,9 @@ where
     /// ing it on the stack.
     fn handle_op_deepgetptr(&mut self) {
         let idx = self.read_u32() as usize;
-        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
-        self.stack.push(Object::Ptr(ptr));
+        let obj = self.stack.get(adjust_idx!(self, idx)).unwrap();
+        self.stack
+            .push(Object::Ptr(Rc::new(RefCell::new(obj.clone()))));
     }
 
     /// Handles 'Opcode::Deepset(usize)' by popping an
@@ -477,10 +484,7 @@ where
     /// inter) to the popped object.
     fn handle_op_deepset(&mut self) {
         let idx = self.read_u32() as usize;
-        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
-        unsafe {
-            *ptr = pop!(self.stack);
-        }
+        self.stack.swap_remove(adjust_idx!(self, idx));
     }
 
     /// Handles 'Opcode::Deref' by popping an object off
@@ -488,7 +492,7 @@ where
     /// sult back on the stack.
     fn handle_op_deref(&mut self) -> Result<()> {
         match pop!(self.stack) {
-            Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
+            Object::Ptr(ptr) => self.stack.push(ptr.borrow().clone()),
             _ => bail!("vm: tried to deref a non-ptr"),
         }
 
@@ -502,7 +506,8 @@ where
         let item = pop!(self.stack);
         match pop!(self.stack) {
             Object::Ptr(ptr) => {
-                unsafe { *ptr = item };
+                let mut p = ptr.borrow_mut();
+                *p = item;
             }
             _ => bail!("vm: tried to deref a non-ptr"),
         }
@@ -540,7 +545,9 @@ where
 
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow_mut().members.get_mut(member) {
-                Some(m) => self.stack.push(Object::Ptr(m as *mut Object<'src>)),
+                Some(m) => self
+                    .stack
+                    .push(Object::Ptr(Rc::new(RefCell::new(m.clone())))),
                 None => bail!(
                     "vm: struct '{}' has no member '{}'",
                     obj.borrow().name,
@@ -640,25 +647,53 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum Object<'src> {
     Number(f64),
     Bool(bool),
     String(Rc<Cow<'src, str>>),
     Struct(Rc<RefCell<StructObject<'src>>>),
-    Ptr(*mut Object<'src>),
+    Ptr(Rc<RefCell<Object<'src>>>),
     Null,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl<'src> std::fmt::Debug for Object<'src> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Object::Number(n) => write!(f, "{}", n),
+            Object::Bool(b) => write!(f, "{}", b),
+            Object::String(s) => write!(f, r#""{}""#, s),
+            Object::Struct(s) => write!(f, "{:?}", s),
+            Object::Ptr(p) => write!(f, "{:?}", p),
+            Object::Null => write!(f, "null"),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone)]
 pub struct StructObject<'src> {
     members: HashMap<Rc<str>, Object<'src>>,
     name: &'src str,
 }
 
+impl<'src> std::fmt::Debug for StructObject<'src> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {{ ", self.name)?;
+
+        for (i, (key, value)) in self.members.iter().enumerate() {
+            write!(f, "{}: {:?}", key, value)?;
+            if i < self.members.len() - 1 {
+                write!(f, ", ")?;
+            }
+        }
+
+        write!(f, " }}")
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct BytecodePtr {
-    ptr: *const u8,
+    ptr: usize,
     location: usize,
 }
 
@@ -844,101 +879,5 @@ impl<'src> From<String> for Object<'src> {
 impl<'src> From<&'src str> for Object<'src> {
     fn from(value: &'src str) -> Self {
         Self::String(Rc::new(Cow::Borrowed(value)))
-    }
-}
-
-/// A fixed-size stack is needed because the stack
-/// could contain Object::Ptr, which in turn could
-/// point to other elements on the stack, effecti-
-/// vely making the entire structure self-referen-
-/// tial. With this stack, we prevent reallocation
-/// which would be bound to happen had we used the
-/// built-in Vec, and hence the pointers never get
-/// invalidated. The alternative was to use Pin to
-/// pin the stack and the objects it contains, but
-/// this was turning the whole codebase into a gi-
-/// ant mess, so I wrote a stack that doesn't grow
-#[derive(Debug)]
-struct Stack<T> {
-    data: *mut T,
-    tos: usize,
-    capacity: usize,
-}
-
-impl<T> Stack<T>
-where
-    T: std::fmt::Debug,
-{
-    fn with_capacity(capacity: usize) -> Self {
-        use std::mem::ManuallyDrop;
-
-        let mut vec = ManuallyDrop::new(Vec::with_capacity(capacity));
-
-        Self {
-            data: vec.as_mut_ptr(),
-            tos: 0,
-            capacity,
-        }
-    }
-
-    fn push(&mut self, item: T) {
-        assert!(self.tos < self.capacity, "stack overflow");
-        unsafe {
-            let ptr = self.data.add(self.tos);
-            ptr.write(item);
-        }
-        self.tos += 1;
-    }
-
-    fn pop(&mut self) -> T {
-        assert!(self.tos > 0, "popped an empty stack");
-        self.tos -= 1;
-        unsafe {
-            let ptr = self.data.add(self.tos);
-            ptr.read()
-        }
-    }
-
-    fn peek(&mut self) -> T {
-        assert!(self.tos > 0, "peeked an empty stack");
-        unsafe {
-            let ptr = self.data.add(self.tos - 1);
-            ptr.read()
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.tos
-    }
-
-    fn get_raw(&mut self, n: usize) -> *mut T {
-        assert!(n <= self.tos, "tried to access element beyond tos");
-        unsafe { self.data.add(n) }
-    }
-
-    fn last(&mut self) -> *mut T {
-        assert!(self.tos > 0, "no elements on the stack");
-        unsafe { self.data.add(self.tos - 1) }
-    }
-
-    fn print_elements(&self) {
-        print!("stack: [");
-        let mut current = self.data;
-        for n in 0..self.tos {
-            print!("{:?}", unsafe { &*current });
-            if n < self.tos - 1 {
-                print!(", ");
-            }
-            current = unsafe { current.add(1) };
-        }
-        println!("]");
-    }
-}
-
-impl<T> Drop for Stack<T> {
-    fn drop(&mut self) {
-        unsafe {
-            let _vec = Vec::from_raw_parts(self.data, self.tos, self.capacity);
-        }
     }
 }
