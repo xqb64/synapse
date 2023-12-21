@@ -473,9 +473,15 @@ where
     /// ing it on the stack.
     fn handle_op_deepgetptr(&mut self) {
         let idx = self.read_u32() as usize;
-        let obj = self.stack.get(adjust_idx!(self, idx)).unwrap();
-        self.stack
-            .push(Object::Ptr(Rc::new(RefCell::new(obj.clone()))));
+        let adjusted_idx = adjust_idx!(self, idx);
+        let obj = self.stack.get(adjusted_idx).unwrap();
+        let rc = Rc::new(RefCell::new(obj.clone()));
+        if let Object::Ref(obj) = obj {
+            self.stack.push(Object::Ptr(obj.clone()));
+        } else {
+            self.stack.push(Object::Ptr(rc.clone()));
+            self.stack[adjusted_idx] = Object::Ref(rc);
+        }
     }
 
     /// Handles 'Opcode::Deepset(usize)' by popping an
@@ -545,9 +551,15 @@ where
 
         if let Object::Struct(obj) = pop!(self.stack) {
             match obj.borrow_mut().members.get_mut(member) {
-                Some(m) => self
-                    .stack
-                    .push(Object::Ptr(Rc::new(RefCell::new(m.clone())))),
+                Some(m) => {
+                    if let Object::Ref(obj) = m {
+                        self.stack.push(Object::Ptr(obj.clone()));
+                    } else {
+                        self.stack
+                            .push(Object::Ptr(Rc::new(RefCell::new(m.clone()))));
+                        *m = Object::Ref(Rc::new(RefCell::new(m.clone())));
+                    }
+                }
                 None => bail!(
                     "vm: struct '{}' has no member '{}'",
                     obj.borrow().name,
@@ -653,6 +665,7 @@ pub enum Object<'src> {
     Bool(bool),
     String(Rc<Cow<'src, str>>),
     Struct(Rc<RefCell<StructObject<'src>>>),
+    Ref(Rc<RefCell<Object<'src>>>),
     Ptr(Rc<RefCell<Object<'src>>>),
     Null,
 }
@@ -664,7 +677,8 @@ impl<'src> std::fmt::Debug for Object<'src> {
             Object::Bool(b) => write!(f, "{}", b),
             Object::String(s) => write!(f, r#""{}""#, s),
             Object::Struct(s) => write!(f, "{:?}", s),
-            Object::Ptr(p) => write!(f, "{:?}", p),
+            Object::Ptr(p) => write!(f, "{:?}", p.borrow()),
+            Object::Ref(r) => write!(f, "{:?}", r.borrow()),
             Object::Null => write!(f, "null"),
         }
     }
