@@ -32,6 +32,7 @@ This project is my second venture into the field of programming language design.
   - `main` is the entry-point
   - `return` is mandatory
   - recursion!
+- methods (taking in `self` as the first parameter)
 - `print` statement
 
 Global scope is **NOT** allowed.
