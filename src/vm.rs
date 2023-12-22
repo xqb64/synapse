@@ -424,19 +424,18 @@ where
 
         let name = self.bytecode.sp[self.read_u32() as usize];
 
-        if let Some(blueprint) = self.blueprints.get(object_type) {
-            if let Some(method) = blueprint.methods.get(name) {
-                self.frame_ptrs.push(BytecodePtr {
-                    ptr: self.ip,
-                    location: self.stack.len() - method.paramcount,
-                });
+        // It's safe to .unwrap() here because the blueprint must have been defined already.
+        let blueprint = self.blueprints.get(object_type).unwrap();
 
-                self.ip = unsafe { self.bytecode.code.as_ptr().add(method.location - 1) };
-            } else {
-                bail!("vm: struct '{}' has no method '{}'", object_type, name);
-            }
+        if let Some(method) = blueprint.methods.get(name) {
+            self.frame_ptrs.push(BytecodePtr {
+                ptr: self.ip,
+                location: self.stack.len() - method.paramcount,
+            });
+
+            self.ip = unsafe { self.bytecode.code.as_ptr().add(method.location - 1) };
         } else {
-            bail!("vm: struct '{}' is not defined", object_type);
+            bail!("vm: struct '{}' has no method '{}'", object_type, name);
         }
 
         Ok(())
