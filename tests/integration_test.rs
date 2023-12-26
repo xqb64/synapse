@@ -563,3 +563,12 @@ fn more_compound_assignment(
 
     run_test!(input_file_path.as_path(), expected);
 }
+
+#[test]
+fn _vec() {
+    let (path, expected) = (
+        "tests/cases/vec.syn",
+        object_vec![128.0, "Hello, world!", 11.0],
+    );
+    run_test!(path, expected);
+}

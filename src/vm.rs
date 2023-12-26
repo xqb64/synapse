@@ -137,6 +137,9 @@ where
                 StructBlueprint => self.handle_op_struct_blueprint(),
                 Impl => self.handle_op_impl(),
                 Strcat => self.handle_op_strcat()?,
+                Vec => self.handle_op_vec(),
+                VecSet => self.handle_op_vec_set(),
+                Subscript => self.handle_op_subscript(),
                 Pop => self.handle_op_pop(),
                 Halt => break,
                 Panic => panic!("vm: raw byte"),
@@ -628,6 +631,38 @@ where
         }
     }
 
+    fn handle_op_vec(&mut self) {
+        let element_count = self.read_u32();
+        let mut vec = Vec::new();
+        for _ in 0..element_count {
+            vec.push(pop!(self.stack));
+        }
+        self.stack.push(vec.into());
+    }
+
+    fn handle_op_vec_set(&mut self) {
+        let value = pop!(self.stack);
+        let idx = pop!(self.stack);
+        let vec = pop!(self.stack);
+
+        if let Object::Vec(vec) = vec {
+            if let Object::Number(idx) = idx {
+                vec.borrow_mut()[idx as usize] = value;
+            }
+        }
+    }
+
+    fn handle_op_subscript(&mut self) {
+        let idx = pop!(self.stack);
+        let vec = pop!(self.stack);
+
+        if let Object::Vec(vec) = vec {
+            if let Object::Number(idx) = idx {
+                self.stack.push(vec.borrow()[idx as usize].clone());
+            }
+        }
+    }
+
     /// Handles 'Opcode::Pop(usize)' by popping
     /// 'popcount' objects off of the stack.
     fn handle_op_pop(&mut self) {
@@ -646,6 +681,7 @@ pub enum Object<'src> {
     String(Rc<Cow<'src, str>>),
     Struct(Rc<RefCell<StructObject<'src>>>),
     Ptr(*mut Object<'src>),
+    Vec(Rc<RefCell<Vec<Object<'src>>>>),
     Null,
 }
 
@@ -858,6 +894,12 @@ impl<'src> From<String> for Object<'src> {
 impl<'src> From<&'src str> for Object<'src> {
     fn from(value: &'src str) -> Self {
         Self::String(Rc::new(Cow::Borrowed(value)))
+    }
+}
+
+impl<'src> From<Vec<Object<'src>>> for Object<'src> {
+    fn from(value: Vec<Object<'src>>) -> Self {
+        Self::Vec(Rc::new(RefCell::new(value)))
     }
 }
 

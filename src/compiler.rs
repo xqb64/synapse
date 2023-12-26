@@ -3,7 +3,8 @@ use crate::parser::{
     CallExpression, ContinueStatement, Expression, ExpressionStatement, FnStatement, ForStatement,
     GetExpression, IfStatement, ImplStatement, Literal, LiteralExpression, LogicalExpression,
     PrintStatement, ReturnStatement, Statement, StructExpression, StructInitializerExpression,
-    StructStatement, UnaryExpression, VariableExpression, WhileStatement,
+    StructStatement, SubscriptExpression, UnaryExpression, VariableExpression, VecExpression,
+    WhileStatement,
 };
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
@@ -150,6 +151,29 @@ impl<'src> Compiler<'src> {
 
         self.emit_opcodes(&[Opcode::Pop]);
         self.emit_u32(1);
+
+        Ok(())
+    }
+
+    fn compile_subscript_assignment(
+        &mut self,
+        sub_expr: SubscriptExpression<'src>,
+        e: AssignExpression<'src>,
+        is_specialized: bool,
+        operator: Token<'src>,
+    ) -> Result<()> {
+        sub_expr.expr.codegen(self)?;
+        sub_expr.index.codegen(self)?;
+
+        if is_specialized {
+            e.lhs.codegen(self)?;
+            e.rhs.codegen(self)?;
+            self.handle_specialized_operator(operator);
+        } else {
+            e.rhs.codegen(self)?;
+        }
+
+        self.emit_opcodes(&[Opcode::VecSet]);
 
         Ok(())
     }
@@ -605,6 +629,8 @@ impl<'src> Codegen<'src> for Expression<'src> {
             Expression::Get(getexp) => getexp.codegen(compiler)?,
             Expression::Struct(structexp) => structexp.codegen(compiler)?,
             Expression::StructInitializer(structinitexp) => structinitexp.codegen(compiler)?,
+            Expression::Vec(vecexpr) => vecexpr.codegen(compiler)?,
+            Expression::Sub(subscriptexpr) => subscriptexpr.codegen(compiler)?,
         }
 
         Ok(())
@@ -814,6 +840,15 @@ impl<'src> Codegen<'src> for AssignExpression<'src> {
                 )?;
             }
 
+            Expression::Sub(subexp) => {
+                compiler.compile_subscript_assignment(
+                    subexp.to_owned(),
+                    self.clone(),
+                    is_specialized,
+                    self.op,
+                )?;
+            }
+
             _ => bail!("compiler: invalid assignment"),
         };
 
@@ -973,6 +1008,30 @@ impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
     }
 }
 
+impl<'src> Codegen<'src> for VecExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        let mut elements = self.elements.clone();
+        elements.reverse();
+        for element in elements {
+            element.codegen(compiler)?;
+        }
+        compiler.emit_opcodes(&[Opcode::Vec]);
+        compiler.emit_u32(self.elements.len() as u32);
+        Ok(())
+    }
+}
+
+impl<'src> Codegen<'src> for SubscriptExpression<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        self.expr.codegen(compiler)?;
+        self.index.codegen(compiler)?;
+
+        compiler.emit_opcodes(&[Opcode::Subscript]);
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, FromPrimitive)]
 #[repr(u8)]
 pub enum Opcode {
@@ -1014,6 +1073,9 @@ pub enum Opcode {
     Struct,
     StructBlueprint,
     Impl,
+    Vec,
+    VecSet,
+    Subscript,
     Pop,
     Halt,
 

@@ -123,6 +123,12 @@ pub enum Token<'src> {
     #[token("}")]
     RightBrace,
 
+    #[token("[")]
+    LeftBracket,
+
+    #[token("]")]
+    RightBracket,
+
     #[token(",")]
     Comma,
 

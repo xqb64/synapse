@@ -482,6 +482,13 @@ impl<'src> Parser<'src> {
                     member,
                     op,
                 });
+            } else if self.is_next(&[Token::LeftBracket]) {
+                let index = self.parse_expression()?;
+                self.consume(Token::RightBracket);
+                expr = Expression::Sub(SubscriptExpression {
+                    expr: expr.into(),
+                    index: index.into(),
+                });
             } else {
                 break;
             }
@@ -506,6 +513,8 @@ impl<'src> Parser<'src> {
             } else {
                 self.parse_variable()
             }
+        } else if self.is_next(&[Token::LeftBracket]) {
+            self.parse_vec_expression()
         } else {
             println!("{:?}", self.current);
             bail!("parser: expected: number, string, (, true, false, null, identifier");
@@ -549,6 +558,15 @@ impl<'src> Parser<'src> {
             member: member.into(),
             value: value.into(),
         }))
+    }
+
+    fn parse_vec_expression(&mut self) -> Result<Expression<'src>> {
+        let mut elements = vec![];
+        while !self.is_next(&[Token::RightBracket]) {
+            elements.push(self.parse_expression()?);
+            self.consume(Token::Comma);
+        }
+        Ok(Expression::Vec(VecExpression { elements }))
     }
 
     fn parse_variable(&mut self) -> Result<Expression<'src>> {
@@ -668,6 +686,8 @@ pub enum Expression<'src> {
     Get(GetExpression<'src>),
     Struct(StructExpression<'src>),
     StructInitializer(StructInitializerExpression<'src>),
+    Vec(VecExpression<'src>),
+    Sub(SubscriptExpression<'src>),
 }
 
 #[derive(Debug, Clone)]
@@ -730,6 +750,17 @@ pub struct GetExpression<'src> {
     pub expr: Box<Expression<'src>>,
     pub member: &'src str,
     pub op: Token<'src>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubscriptExpression<'src> {
+    pub expr: Box<Expression<'src>>,
+    pub index: Box<Expression<'src>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VecExpression<'src> {
+    pub elements: Vec<Expression<'src>>,
 }
 
 #[derive(Debug, Clone)]
