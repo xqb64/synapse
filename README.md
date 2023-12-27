@@ -11,6 +11,7 @@ This project is my second venture into the field of programming language design.
   - booleans
   - strings
   - structures
+  - vectors
   - pointers
   - null
 - operators for the said types
