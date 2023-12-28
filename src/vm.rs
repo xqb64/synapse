@@ -1,5 +1,5 @@
 use crate::compiler::{Blueprint, Bytecode, Function, Opcode};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -112,8 +112,8 @@ where
                 Opcode::GetattrPtr(attr) => self.handle_op_getattrptr(attr)?,
                 Opcode::Setattr(attr) => self.handle_op_setattr(attr),
                 Opcode::Struct(name) => self.handle_op_struct(name),
-                Opcode::StructBlueprint => self.handle_op_struct_blueprint(),
-                Opcode::Impl => self.handle_op_impl(),
+                Opcode::StructBlueprint => self.handle_op_struct_blueprint()?,
+                Opcode::Impl => self.handle_op_impl()?,
                 Opcode::Strcat => self.handle_op_strcat()?,
                 Opcode::Vec(element_count) => self.handle_op_vec(*element_count),
                 Opcode::VecSet => self.handle_op_vec_set(),
@@ -133,15 +133,20 @@ where
         Ok(())
     }
 
-    fn read_u32(&mut self) -> u32 {
-        let mut bytes = vec![];
-        for i in 1..5 {
-            if let Opcode::Raw(byte) = self.bytecode.code[self.ip + i] {
-                bytes.push(byte);
-            }
-        }
+    fn read_u32(&mut self) -> Result<u32> {
+        let n = self.bytecode.code[self.ip + 1..self.ip + 5]
+            .iter()
+            .map(|opcode| match opcode {
+                Opcode::Raw(byte) => Ok(*byte),
+                _ => bail!("vm: not a raw byte"),
+            })
+            .collect::<Result<Vec<u8>>>()
+            .and_then(|vec| vec.try_into().map_err(|_| anyhow!("conversion failed")))
+            .map(u32::from_be_bytes);
+
         self.ip += 4;
-        u32::from_be_bytes(bytes.as_slice().try_into().unwrap())
+
+        n
     }
 
     /// Handles 'Opcode::Const(f64)' by constructing
@@ -549,9 +554,9 @@ where
         self.stack.push(structobj);
     }
 
-    fn handle_op_struct_blueprint(&mut self) {
-        let blueprint_name_idx = self.read_u32();
-        let member_count = self.read_u32();
+    fn handle_op_struct_blueprint(&mut self) -> Result<()> {
+        let blueprint_name_idx = self.read_u32()?;
+        let member_count = self.read_u32()?;
 
         let mut bp = Blueprint {
             name: self.bytecode.sp[blueprint_name_idx as usize],
@@ -560,23 +565,25 @@ where
         };
 
         for _ in 0..member_count {
-            let member_name_idx = self.read_u32();
+            let member_name_idx = self.read_u32()?;
             let member_name = self.bytecode.sp[member_name_idx as usize];
             bp.members.push(member_name);
         }
 
         self.blueprints
             .insert(self.bytecode.sp[blueprint_name_idx as usize], bp);
+
+        Ok(())
     }
 
-    fn handle_op_impl(&mut self) {
-        let blueprint_name_idx = self.read_u32();
-        let method_count = self.read_u32();
+    fn handle_op_impl(&mut self) -> Result<()> {
+        let blueprint_name_idx = self.read_u32()?;
+        let method_count = self.read_u32()?;
 
         for _ in 0..method_count {
-            let method_name_idx = self.read_u32();
-            let paramcount = self.read_u32();
-            let location = self.read_u32();
+            let method_name_idx = self.read_u32()?;
+            let paramcount = self.read_u32()?;
+            let location = self.read_u32()?;
 
             let f = Function {
                 name: self.bytecode.sp[method_name_idx as usize],
@@ -592,6 +599,8 @@ where
                 bp.methods.insert(f.name, f);
             }
         }
+
+        Ok(())
     }
 
     fn handle_op_vec(&mut self, element_count: usize) {
