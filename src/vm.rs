@@ -41,7 +41,7 @@ macro_rules! binop_relational {
 
 macro_rules! adjust_idx {
     ($self:tt, $index:expr) => {{
-        let BytecodePtr { ptr: _, location } = unsafe { *$self.frame_ptrs.last() };
+        let BytecodePtr { ptr: _, location } = *$self.frame_ptrs.last();
         location + $index
     }};
 }
@@ -63,8 +63,12 @@ where
     pub fn new(bytecode: &'bytecode Bytecode<'src>) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
-            stack: Stack::with_capacity(STACK_MIN),
-            frame_ptrs: Stack::with_capacity(STACK_MIN),
+            stack: Stack {
+                data: Vec::with_capacity(STACK_MIN),
+            },
+            frame_ptrs: Stack {
+                data: Vec::with_capacity(STACK_MIN),
+            },
             ip: 0,
             blueprints: HashMap::new(),
         }
@@ -436,8 +440,13 @@ where
     /// object at index 'idx' (relative to the current
     /// frame pointer), and pushing it on the stack.
     fn handle_op_deepget(&mut self, idx: usize) {
-        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
-        self.stack.push(unsafe { (*ptr).clone() });
+        let obj = self
+            .stack
+            .data
+            .get_mut(adjust_idx!(self, idx))
+            .unwrap()
+            .clone();
+        self.stack.push(obj);
     }
 
     /// Handles 'Opcode::DeepgetPtr(usize)' by getting
@@ -445,8 +454,8 @@ where
     /// ative to the current frame pointer), and push-
     /// ing it on the stack.
     fn handle_op_deepgetptr(&mut self, idx: usize) {
-        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
-        self.stack.push(Object::Ptr(ptr));
+        let obj = &mut self.stack.data[adjust_idx!(self, idx)] as *mut Object<'src>;
+        self.stack.push(Object::Ptr(obj));
     }
 
     /// Handles 'Opcode::Deepset(usize)' by popping an
@@ -454,10 +463,7 @@ where
     /// index 'idx' (relative to the current frame po-
     /// inter) to the popped object.
     fn handle_op_deepset(&mut self, idx: usize) {
-        let ptr = self.stack.get_raw(adjust_idx!(self, idx));
-        unsafe {
-            *ptr = pop!(self.stack);
-        }
+        self.stack.data.swap_remove(adjust_idx!(self, idx));
     }
 
     /// Handles 'Opcode::Deref' by popping an object off
@@ -876,85 +882,45 @@ impl<'src> From<Vec<Object<'src>>> for Object<'src> {
 /// ant mess, so I wrote a stack that doesn't grow
 #[derive(Debug)]
 struct Stack<T> {
-    data: *mut T,
-    tos: usize,
-    capacity: usize,
+    data: Vec<T>,
 }
 
 impl<T> Stack<T>
 where
     T: std::fmt::Debug + std::default::Default + Clone,
 {
-    fn with_capacity(capacity: usize) -> Self {
-        use std::mem::ManuallyDrop;
-
-        let mut vec = ManuallyDrop::new(Vec::with_capacity(capacity));
-
-        Self {
-            data: vec.as_mut_ptr(),
-            tos: 0,
-            capacity,
-        }
-    }
-
     fn push(&mut self, item: T) {
-        assert!(self.tos < self.capacity, "stack overflow");
-        unsafe {
-            let ptr = self.data.add(self.tos);
-            ptr.write(item);
-        }
-        self.tos += 1;
+        assert!(self.data.len() < self.data.capacity(), "stack overflow");
+        self.data.push(item);
     }
 
     fn pop(&mut self) -> T {
-        assert!(self.tos > 0, "popped an empty stack");
-        self.tos -= 1;
-        unsafe {
-            let ptr = self.data.add(self.tos);
-            std::ptr::replace(ptr, T::default())
-        }
+        assert!(!self.data.is_empty(), "popped an empty stack");
+        unsafe { self.data.pop().unwrap_unchecked() }
     }
 
-    fn peek(&mut self) -> T {
-        assert!(self.tos > 0, "peeked an empty stack");
-        unsafe {
-            let ptr = self.data.add(self.tos - 1);
-            (*ptr).clone()
-        }
+    fn peek(&mut self) -> &T {
+        assert!(!self.data.is_empty(), "peeked an empty stack");
+        unsafe { self.data.last().unwrap_unchecked() }
     }
 
     fn len(&self) -> usize {
-        self.tos
+        self.data.len()
     }
 
-    fn get_raw(&mut self, n: usize) -> *mut T {
-        assert!(n <= self.tos, "tried to access element beyond tos");
-        unsafe { self.data.add(n) }
-    }
-
-    fn last(&mut self) -> *mut T {
-        assert!(self.tos > 0, "no elements on the stack");
-        unsafe { self.data.add(self.tos - 1) }
+    fn last(&mut self) -> &T {
+        assert!(!self.data.is_empty(), "no elements on the stack");
+        unsafe { self.data.last().unwrap_unchecked() }
     }
 
     fn print_elements(&self) {
         print!("stack: [");
-        let mut current = self.data;
-        for n in 0..self.tos {
-            print!("{:?}", unsafe { &*current });
-            if n < self.tos - 1 {
+        for (idx, n) in self.data.iter().enumerate() {
+            print!("{:?}", n);
+            if idx < self.data.len() - 1 {
                 print!(", ");
             }
-            current = unsafe { current.add(1) };
         }
         println!("]");
-    }
-}
-
-impl<T> Drop for Stack<T> {
-    fn drop(&mut self) {
-        unsafe {
-            let _vec = Vec::from_raw_parts(self.data, self.tos, self.capacity);
-        }
     }
 }
