@@ -46,26 +46,11 @@ macro_rules! adjust_idx {
     }};
 }
 
-macro_rules! match_opcode {
-    ($opcode:expr ; $($name:ident => $op:expr),* $(,)?) => {{
-
-        #[allow(non_upper_case_globals)]
-        mod _consts {
-            $(pub const $name: u8 = super::Opcode::$name as u8;)*
-        }
-
-        match $opcode {
-            $(_consts::$name => $op,)*
-            _ => panic!("Unexpected opcode"),
-        }
-    }};
-}
-
 pub struct VM<'src, 'bytecode> {
     bytecode: &'bytecode Bytecode<'src>,
     stack: Stack<Object<'src>>,
     frame_ptrs: Stack<BytecodePtr>,
-    ip: *const u8,
+    ip: usize,
     blueprints: HashMap<&'src str, Blueprint<'src>>,
 }
 
@@ -80,104 +65,96 @@ where
             bytecode,
             stack: Stack::with_capacity(STACK_MIN),
             frame_ptrs: Stack::with_capacity(STACK_MIN),
-            ip: std::ptr::null(),
+            ip: 0,
             blueprints: HashMap::new(),
         }
     }
 
     pub fn exec(&mut self) -> Result<()> {
-        let start = self.bytecode.code.as_ptr();
-        let end = unsafe { start.add(self.bytecode.code.len()) };
-
-        self.ip = start;
-
-        while self.ip != end {
-            let opcode = unsafe { *self.ip };
-
+        loop {
             if cfg!(debug_assertions) {
-                println!("current instruction: {:?}", Opcode::from(opcode));
+                println!("current instruction: {:?}", self.bytecode.code[self.ip]);
             }
 
-            match_opcode!(opcode;
-                Const => self.handle_op_const(),
-                Str => self.handle_op_str(),
-                Print => self.handle_op_print(),
-                Add => self.handle_op_add()?,
-                Sub => self.handle_op_sub()?,
-                Mul => self.handle_op_mul()?,
-                Div => self.handle_op_div()?,
-                Mod => self.handle_op_mod()?,
-                BitAnd => self.handle_op_bitand()?,
-                BitOr => self.handle_op_bitor()?,
-                BitXor => self.handle_op_bitxor()?,
-                BitNot => self.handle_op_bitnot()?,
-                BitShl => self.handle_op_bitshl()?,
-                BitShr => self.handle_op_bitshr()?,
-                False => self.handle_op_false(),
-                Not => self.handle_op_not()?,
-                Neg => self.handle_op_neg()?,
-                Null => self.handle_op_null(),
-                Eq => self.handle_op_eq(),
-                Lt => self.handle_op_lt()?,
-                Gt => self.handle_op_gt()?,
-                Jmp => self.handle_op_jmp(),
-                Jz => self.handle_op_jz(),
-                Call => self.handle_op_call(),
-                CallMethod => self.handle_op_call_method()?,
-                Ret => self.handle_op_ret(),
-                Deepget => self.handle_op_deepget(),
-                DeepgetPtr => self.handle_op_deepgetptr(),
-                Deepset => self.handle_op_deepset(),
-                Deref => self.handle_op_deref()?,
-                DerefSet => self.handle_op_derefset()?,
-                Getattr => self.handle_op_getattr()?,
-                GetattrPtr => self.handle_op_getattrptr()?,
-                Setattr => self.handle_op_setattr(),
-                Struct => self.handle_op_struct(),
-                StructBlueprint => self.handle_op_struct_blueprint(),
-                Impl => self.handle_op_impl(),
-                Strcat => self.handle_op_strcat()?,
-                Vec => self.handle_op_vec(),
-                VecSet => self.handle_op_vec_set(),
-                Subscript => self.handle_op_subscript(),
-                Pop => self.handle_op_pop(),
-                Halt => break,
-                Panic => panic!("vm: raw byte"),
-            );
+            match unsafe { self.bytecode.code.get_unchecked(self.ip) } {
+                Opcode::Const(n) => self.handle_op_const(*n),
+                Opcode::Str(s) => self.handle_op_str(s),
+                Opcode::Print => self.handle_op_print(),
+                Opcode::Add => self.handle_op_add()?,
+                Opcode::Sub => self.handle_op_sub()?,
+                Opcode::Mul => self.handle_op_mul()?,
+                Opcode::Div => self.handle_op_div()?,
+                Opcode::Mod => self.handle_op_mod()?,
+                Opcode::BitAnd => self.handle_op_bitand()?,
+                Opcode::BitOr => self.handle_op_bitor()?,
+                Opcode::BitXor => self.handle_op_bitxor()?,
+                Opcode::BitNot => self.handle_op_bitnot()?,
+                Opcode::BitShl => self.handle_op_bitshl()?,
+                Opcode::BitShr => self.handle_op_bitshr()?,
+                Opcode::False => self.handle_op_false(),
+                Opcode::Not => self.handle_op_not()?,
+                Opcode::Neg => self.handle_op_neg()?,
+                Opcode::Null => self.handle_op_null(),
+                Opcode::Eq => self.handle_op_eq(),
+                Opcode::Lt => self.handle_op_lt()?,
+                Opcode::Gt => self.handle_op_gt()?,
+                Opcode::Jmp(addr) => self.handle_op_jmp(*addr),
+                Opcode::Jz(addr) => self.handle_op_jz(*addr),
+                Opcode::Call(argcount) => self.handle_op_call(*argcount),
+                Opcode::CallMethod(method) => self.handle_op_call_method(method)?,
+                Opcode::Ret => self.handle_op_ret(),
+                Opcode::Deepget(idx) => self.handle_op_deepget(*idx),
+                Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(*idx),
+                Opcode::Deepset(idx) => self.handle_op_deepset(*idx),
+                Opcode::Deref => self.handle_op_deref()?,
+                Opcode::DerefSet => self.handle_op_derefset()?,
+                Opcode::Getattr(attr) => self.handle_op_getattr(attr)?,
+                Opcode::GetattrPtr(attr) => self.handle_op_getattrptr(attr)?,
+                Opcode::Setattr(attr) => self.handle_op_setattr(attr),
+                Opcode::Struct(name) => self.handle_op_struct(name),
+                Opcode::StructBlueprint => self.handle_op_struct_blueprint(),
+                Opcode::Impl => self.handle_op_impl(),
+                Opcode::Strcat => self.handle_op_strcat()?,
+                Opcode::Vec(element_count) => self.handle_op_vec(*element_count),
+                Opcode::VecSet => self.handle_op_vec_set(),
+                Opcode::Subscript => self.handle_op_subscript(),
+                Opcode::Pop(n) => self.handle_op_pop(*n),
+                Opcode::Halt => break,
+                Opcode::Raw(_) => panic!("vm: raw byte"),
+            }
 
             if cfg!(debug_assertions) {
                 self.stack.print_elements();
             }
 
-            self.ip = unsafe { self.ip.add(1) };
+            self.ip += 1;
         }
 
         Ok(())
     }
 
-    #[inline(always)]
     fn read_u32(&mut self) -> u32 {
-        let bytes = unsafe { self.ip.add(1) };
-        let n = u32::from_be_bytes(unsafe { *(bytes as *const [u8; 4]) });
-
-        self.ip = unsafe { self.ip.add(4) };
-
-        n
+        let mut bytes = vec![];
+        for i in 1..5 {
+            if let Opcode::Raw(byte) = self.bytecode.code[self.ip + i] {
+                bytes.push(byte);
+            }
+        }
+        self.ip += 4;
+        u32::from_be_bytes(bytes.as_slice().try_into().unwrap())
     }
 
     /// Handles 'Opcode::Const(f64)' by constructing
     /// an Object::Number, with the f64 as its value,
     /// and pushing it on the stack.
-    fn handle_op_const(&mut self) {
-        let n = self.bytecode.cp[self.read_u32() as usize];
+    fn handle_op_const(&mut self, n: f64) {
         self.stack.push(n.into());
     }
 
     /// Handles 'Opcode::Str(&str)' by constructing
     /// an Object::String, with the &str as its va-
     /// lue, and pushing it on the stack.
-    fn handle_op_str(&mut self) {
-        let s = self.bytecode.sp[self.read_u32() as usize];
+    fn handle_op_str(&mut self, s: &'src str) {
         self.stack.push(s.into());
     }
 
@@ -385,8 +362,8 @@ where
     /// Handles 'Opcode::Jmp(usize)' by setting the
     /// instruction pointer to the address provided
     /// in the opcode.
-    fn handle_op_jmp(&mut self) {
-        self.ip = unsafe { self.bytecode.code.as_ptr().add(self.read_u32() as usize) };
+    fn handle_op_jmp(&mut self, addr: usize) {
+        self.ip = addr;
     }
 
     /// Handles 'Opcode::Jz(usize)' by popping an
@@ -394,11 +371,10 @@ where
     /// and setting the instruction pointer to the
     /// address provided in the opcode, if and only
     /// if the popped object was falsey.
-    fn handle_op_jz(&mut self) {
-        let addr = self.read_u32() as usize;
+    fn handle_op_jz(&mut self, addr: usize) {
         let item = pop!(self.stack);
         if let Object::Bool(_b @ false) = item {
-            self.ip = unsafe { self.bytecode.code.as_ptr().add(addr) };
+            self.ip = addr;
         }
     }
 
@@ -408,15 +384,14 @@ where
     /// tion that comes after the current instruc-
     /// tion pointer, and its location will be the
     /// size of the stack - n.
-    fn handle_op_call(&mut self) {
-        let n = self.read_u32() as usize;
+    fn handle_op_call(&mut self, n: usize) {
         self.frame_ptrs.push(BytecodePtr {
-            ptr: unsafe { self.ip.add(5) },
+            ptr: self.ip + 1,
             location: self.stack.len() - n,
         });
     }
 
-    fn handle_op_call_method(&mut self) -> Result<()> {
+    fn handle_op_call_method(&mut self, method: &'src str) -> Result<()> {
         let object = self.stack.peek();
 
         let object_type = if let Object::Struct(structobj) = object {
@@ -425,20 +400,18 @@ where
             bail!("vm: tried to call a method on a non-struct");
         };
 
-        let name = self.bytecode.sp[self.read_u32() as usize];
-
         // It's safe to .unwrap() here because the blueprint must have been defined already.
         let blueprint = self.blueprints.get(object_type).unwrap();
 
-        if let Some(method) = blueprint.methods.get(name) {
+        if let Some(method) = blueprint.methods.get(method) {
             self.frame_ptrs.push(BytecodePtr {
                 ptr: self.ip,
                 location: self.stack.len() - method.paramcount,
             });
 
-            self.ip = unsafe { self.bytecode.code.as_ptr().add(method.location - 1) };
+            self.ip = method.location;
         } else {
-            bail!("vm: struct '{}' has no method '{}'", object_type, name);
+            bail!("vm: struct '{}' has no method '{}'", object_type, method);
         }
 
         Ok(())
@@ -457,8 +430,7 @@ where
     /// Handles 'Opcode::Deepget(usize)' by getting an
     /// object at index 'idx' (relative to the current
     /// frame pointer), and pushing it on the stack.
-    fn handle_op_deepget(&mut self) {
-        let idx = self.read_u32() as usize;
+    fn handle_op_deepget(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         self.stack.push(unsafe { (*ptr).clone() });
     }
@@ -467,8 +439,7 @@ where
     /// the pointer to the object at index 'idx' (rel-
     /// ative to the current frame pointer), and push-
     /// ing it on the stack.
-    fn handle_op_deepgetptr(&mut self) {
-        let idx = self.read_u32() as usize;
+    fn handle_op_deepgetptr(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         self.stack.push(Object::Ptr(ptr));
     }
@@ -477,8 +448,7 @@ where
     /// object off the stack and setting the object at
     /// index 'idx' (relative to the current frame po-
     /// inter) to the popped object.
-    fn handle_op_deepset(&mut self) {
-        let idx = self.read_u32() as usize;
+    fn handle_op_deepset(&mut self, idx: usize) {
         let ptr = self.stack.get_raw(adjust_idx!(self, idx));
         unsafe {
             *ptr = pop!(self.stack);
@@ -516,16 +486,14 @@ where
     /// off the stack (expected to be a struct), looking up the
     /// member with the &str value contained in the opcode, and
     /// pushing it on the stack.
-    fn handle_op_getattr(&mut self) -> Result<()> {
-        let member = self.bytecode.sp[self.read_u32() as usize];
-
+    fn handle_op_getattr(&mut self, attr: &'src str) -> Result<()> {
         if let Object::Struct(obj) = pop!(self.stack) {
-            match obj.borrow().members.get(member) {
+            match obj.borrow().members.get(attr) {
                 Some(m) => self.stack.push(m.clone()),
                 None => bail!(
                     "vm: struct '{}' has no member '{}'",
                     obj.borrow().name,
-                    member
+                    attr
                 ),
             };
         }
@@ -537,16 +505,14 @@ where
     /// off the stack (expected to be a struct), looking up the
     /// member with the &str value contained in the opcode, and
     /// pushing the pointer to it on the stack.
-    fn handle_op_getattrptr(&mut self) -> Result<()> {
-        let member = self.bytecode.sp[self.read_u32() as usize];
-
+    fn handle_op_getattrptr(&mut self, attr: &'src str) -> Result<()> {
         if let Object::Struct(obj) = pop!(self.stack) {
-            match obj.borrow_mut().members.get_mut(member) {
+            match obj.borrow_mut().members.get_mut(attr) {
                 Some(m) => self.stack.push(Object::Ptr(m as *mut Object<'src>)),
                 None => bail!(
                     "vm: struct '{}' has no member '{}'",
                     obj.borrow().name,
-                    member
+                    attr
                 ),
             };
         }
@@ -559,13 +525,11 @@ where
     /// spectively), setting the member with the &str value co-
     /// ntained in the opcode to the popped value, and pushing
     /// the struct back on the stack.
-    fn handle_op_setattr(&mut self) {
-        let member = self.bytecode.sp[self.read_u32() as usize];
-
+    fn handle_op_setattr(&mut self, attr: &'src str) {
         let value = pop!(self.stack);
         let structobj = pop!(self.stack);
         if let Object::Struct(s) = structobj {
-            s.borrow_mut().members.insert(member.into(), value);
+            s.borrow_mut().members.insert(attr.into(), value);
             self.stack.push(Object::Struct(s));
         }
     }
@@ -574,8 +538,7 @@ where
     /// Object::Struct (using the &str value contained in
     /// the opcode as the naame, and with an empty members
     /// HashMap), and pushing it on the stack.
-    fn handle_op_struct(&mut self) {
-        let name = self.bytecode.sp[self.read_u32() as usize];
+    fn handle_op_struct(&mut self, name: &'src str) {
         let structobj = Object::Struct(Rc::new(
             (StructObject {
                 members: HashMap::new(),
@@ -631,8 +594,7 @@ where
         }
     }
 
-    fn handle_op_vec(&mut self) {
-        let element_count = self.read_u32();
+    fn handle_op_vec(&mut self, element_count: usize) {
         let mut vec = Vec::new();
         for _ in 0..element_count {
             vec.push(pop!(self.stack));
@@ -665,9 +627,7 @@ where
 
     /// Handles 'Opcode::Pop(usize)' by popping
     /// 'popcount' objects off of the stack.
-    fn handle_op_pop(&mut self) {
-        let popcount = self.read_u32() as usize;
-
+    fn handle_op_pop(&mut self, popcount: usize) {
         for _ in 0..popcount {
             pop!(self.stack);
         }
@@ -691,19 +651,10 @@ pub struct StructObject<'src> {
     name: &'src str,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct BytecodePtr {
-    ptr: *const u8,
+    ptr: usize,
     location: usize,
-}
-
-impl std::default::Default for BytecodePtr {
-    fn default() -> Self {
-        Self {
-            location: 0,
-            ptr: std::ptr::null(),
-        }
-    }
 }
 
 impl<'src> std::default::Default for Object<'src> {

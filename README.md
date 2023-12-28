@@ -59,13 +59,12 @@ fn main() {
 }
 ```
 
-NOTE: The above program has been the go-to benchmark throughout the development cycle. The running time on my system (AMD Ryzen 3 3200G with Radeon Vega Graphics) is currently:
+NOTE: The above program has been the go-to benchmark throughout the development cycle. The running time on my system (AMD Ryzen 3 3200G with Radeon Vega Graphics) varied wildly throughout the development cycle, from somewhere around 13s to, currently, 21s:
 
 ```
-$ hyperfine --runs 5 './target/release/synapse benches/cases/fib40.syn'
 Benchmark 1: target/release/synapse benches/cases/fib40.syn
-  Time (mean ± σ):     13.638 s ±  0.023 s    [User: 13.637 s, System: 0.000 s]
-  Range (min … max):   13.618 s … 13.667 s    5 runs
+  Time (mean ± σ):     21.664 s ±  0.029 s    [User: 21.602 s, System: 0.009 s]
+  Range (min … max):   21.633 s … 21.701 s    5 runs
 ```
 
 A mandatory comparison to Python is in order:
@@ -88,8 +87,6 @@ Benchmark 1: python3 fib.py
 Other than this, it's pointless to compare the two, because obviously, besides being a lot more useful, Python comes with `@functools.lru_cache()` and could execute this code in a blink of an eye with it.
 
 ## Examples
-
-As of now, `synapse` does not have any built-in data structures, but you could write a linked list using the `struct` type:
 
 ```rust
 struct node {
