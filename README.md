@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/xqb64/synapse/master/synapse.png" alt="synapse"/>
-</p>
-
 <h1 align="center">synapse</h1>
 
 This project is my second venture into the field of programming language design. Similarly to [my initial attempt](https://github.com/xqb64/venom), the main idea was not to engineer a production-quality system, but to have fun trying to streamline performance and broaden my horizons. Given the educational nature of the project, I'm aware it has its fair share of limitations, but despite this, I'd argue that the features listed off below make it lean towards being somewhat useful:
@@ -62,9 +58,10 @@ fn main() {
 NOTE: The above program has been the go-to benchmark throughout the development cycle. The running time on my system (AMD Ryzen 3 3200G with Radeon Vega Graphics) varied wildly throughout the development cycle, from somewhere around 13s to, currently, 21s:
 
 ```
+$ hyperfine --runs 5 'target/release/synapse benches/cases/fib40.syn'
 Benchmark 1: target/release/synapse benches/cases/fib40.syn
-  Time (mean ± σ):     21.664 s ±  0.029 s    [User: 21.602 s, System: 0.009 s]
-  Range (min … max):   21.633 s … 21.701 s    5 runs
+  Time (mean ± σ):     19.352 s ±  0.069 s    [User: 19.327 s, System: 0.007 s]
+  Range (min … max):   19.252 s … 19.434 s    5 runs
 ```
 
 A mandatory comparison to Python is in order:
