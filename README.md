@@ -55,7 +55,7 @@ fn main() {
 }
 ```
 
-NOTE: The above program has been the go-to benchmark throughout the development cycle. The running time on my system (AMD Ryzen 3 3200G with Radeon Vega Graphics) varied wildly throughout the development cycle, from somewhere around 13s to, currently, 21s:
+NOTE: The above program has been the go-to benchmark throughout the development cycle. The running time on my system (AMD Ryzen 3 3200G with Radeon Vega Graphics) varied wildly throughout the development cycle, from somewhere around 13s to, currently, 19s:
 
 ```
 $ hyperfine --runs 5 'target/release/synapse benches/cases/fib40.syn'
