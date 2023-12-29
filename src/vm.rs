@@ -3,16 +3,10 @@ use anyhow::{anyhow, bail, Result};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-macro_rules! pop {
-    ($stack:expr) => {{
-        $stack.pop()
-    }};
-}
-
 macro_rules! binop_arithmetic {
     ($self:tt, $op:tt) => {{
-        let b = pop!($self.stack);
-        let a = pop!($self.stack);
+        let b = $self.stack.pop();
+        let a = $self.stack.pop();
         let res = (a $op b);
         match res {
             Ok(r) => $self.stack.push(r.into()),
@@ -30,8 +24,8 @@ fn prepare4bitwise(a: f64, b: f64) -> (u64, u64) {
 
 macro_rules! binop_relational {
     ($self:tt, $op:tt) => {{
-        let b = pop!($self.stack);
-        let a = pop!($self.stack);
+        let b = $self.stack.pop();
+        let a = $self.stack.pop();
         if std::mem::discriminant(&a) != std::mem::discriminant(&b) {
             bail!("vm: only numbers can be: <, >, <=, >=");
         }
@@ -63,12 +57,8 @@ where
     pub fn new(bytecode: &'bytecode Bytecode<'src>) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
-            stack: Stack {
-                data: Vec::with_capacity(STACK_MIN),
-            },
-            frame_ptrs: Stack {
-                data: Vec::with_capacity(STACK_MIN),
-            },
+            stack: Stack::new(),
+            frame_ptrs: Stack::new(),
             ip: 0,
             blueprints: HashMap::new(),
         }
@@ -172,8 +162,8 @@ where
     /// concatenating them into a new string object,
     /// and pushing the new object on the stack.
     fn handle_op_strcat(&mut self) -> Result<()> {
-        let b = pop!(self.stack);
-        let a = pop!(self.stack);
+        let b = self.stack.pop();
+        let a = self.stack.pop();
 
         match (a, b) {
             (Object::String(a), Object::String(b)) => {
@@ -191,7 +181,7 @@ where
     /// Handles 'Opcode::Print' by popping an obj-
     /// ect off the stack and printing it out.
     fn handle_op_print(&mut self) {
-        let obj = pop!(self.stack);
+        let obj = self.stack.pop();
         if cfg!(debug_assertions) {
             print!("dbg: ");
         }
@@ -297,7 +287,7 @@ where
     /// operation on it, and pushing the result back
     /// on the stack.
     fn handle_op_bitnot(&mut self) -> Result<()> {
-        let obj = pop!(self.stack);
+        let obj = self.stack.pop();
         self.stack.push((!obj)?);
 
         Ok(())
@@ -315,7 +305,7 @@ where
     /// operation on it, and pushing the result back
     /// on the stack.
     fn handle_op_not(&mut self) -> Result<()> {
-        let obj = pop!(self.stack);
+        let obj = self.stack.pop();
         self.stack.push((!obj)?);
 
         Ok(())
@@ -326,7 +316,7 @@ where
     /// operation on it, and pushing the result back
     /// on the stack.
     fn handle_op_neg(&mut self) -> Result<()> {
-        let obj = pop!(self.stack);
+        let obj = self.stack.pop();
         self.stack.push((-obj)?);
 
         Ok(())
@@ -343,8 +333,8 @@ where
     /// on them, and pushing the boolean result back
     /// on the stack.
     fn handle_op_eq(&mut self) {
-        let b = pop!(self.stack);
-        let a = pop!(self.stack);
+        let b = self.stack.pop();
+        let a = self.stack.pop();
         self.stack.push((a == b).into())
     }
 
@@ -381,7 +371,7 @@ where
     /// address provided in the opcode, if and only
     /// if the popped object was falsey.
     fn handle_op_jz(&mut self, addr: usize) {
-        let item = pop!(self.stack);
+        let item = self.stack.pop();
         if let Object::Bool(_b @ false) = item {
             self.ip = addr;
         }
@@ -431,7 +421,7 @@ where
     /// the instruction pointer to the address contai-
     /// ned within the object.
     fn handle_op_ret(&mut self) {
-        let retaddr = pop!(self.frame_ptrs);
+        let retaddr = self.frame_ptrs.pop();
         let BytecodePtr { ptr, location: _ } = retaddr;
         self.ip = ptr;
     }
@@ -470,7 +460,7 @@ where
     /// the stack, dereferencing it, and pushing the re-
     /// sult back on the stack.
     fn handle_op_deref(&mut self) -> Result<()> {
-        match pop!(self.stack) {
+        match self.stack.pop() {
             Object::Ptr(ptr) => self.stack.push(unsafe { (*ptr).clone() }),
             _ => bail!("vm: tried to deref a non-ptr"),
         }
@@ -482,8 +472,8 @@ where
     /// off the stack (the value and the pointer), deref-
     /// erencing the pointer, and setting it to the value.
     fn handle_op_derefset(&mut self) -> Result<()> {
-        let item = pop!(self.stack);
-        match pop!(self.stack) {
+        let item = self.stack.pop();
+        match self.stack.pop() {
             Object::Ptr(ptr) => {
                 unsafe { *ptr = item };
             }
@@ -498,7 +488,7 @@ where
     /// member with the &str value contained in the opcode, and
     /// pushing it on the stack.
     fn handle_op_getattr(&mut self, attr: &'src str) -> Result<()> {
-        if let Object::Struct(obj) = pop!(self.stack) {
+        if let Object::Struct(obj) = self.stack.pop() {
             match obj.borrow().members.get(attr) {
                 Some(m) => self.stack.push(m.clone()),
                 None => bail!(
@@ -517,7 +507,7 @@ where
     /// member with the &str value contained in the opcode, and
     /// pushing the pointer to it on the stack.
     fn handle_op_getattrptr(&mut self, attr: &'src str) -> Result<()> {
-        if let Object::Struct(obj) = pop!(self.stack) {
+        if let Object::Struct(obj) = self.stack.pop() {
             match obj.borrow_mut().members.get_mut(attr) {
                 Some(m) => self.stack.push(Object::Ptr(m as *mut Object<'src>)),
                 None => bail!(
@@ -537,8 +527,8 @@ where
     /// ntained in the opcode to the popped value, and pushing
     /// the struct back on the stack.
     fn handle_op_setattr(&mut self, attr: &'src str) {
-        let value = pop!(self.stack);
-        let structobj = pop!(self.stack);
+        let value = self.stack.pop();
+        let structobj = self.stack.pop();
         if let Object::Struct(s) = structobj {
             s.borrow_mut().members.insert(attr.into(), value);
             self.stack.push(Object::Struct(s));
@@ -612,15 +602,15 @@ where
     fn handle_op_vec(&mut self, element_count: usize) {
         let mut vec = Vec::new();
         for _ in 0..element_count {
-            vec.push(pop!(self.stack));
+            vec.push(self.stack.pop());
         }
         self.stack.push(vec.into());
     }
 
     fn handle_op_vec_set(&mut self) {
-        let value = pop!(self.stack);
-        let idx = pop!(self.stack);
-        let vec = pop!(self.stack);
+        let value = self.stack.pop();
+        let idx = self.stack.pop();
+        let vec = self.stack.pop();
 
         if let Object::Vec(vec) = vec {
             if let Object::Number(idx) = idx {
@@ -630,8 +620,8 @@ where
     }
 
     fn handle_op_subscript(&mut self) {
-        let idx = pop!(self.stack);
-        let vec = pop!(self.stack);
+        let idx = self.stack.pop();
+        let vec = self.stack.pop();
 
         if let Object::Vec(vec) = vec {
             if let Object::Number(idx) = idx {
@@ -644,7 +634,7 @@ where
     /// 'popcount' objects off of the stack.
     fn handle_op_pop(&mut self, popcount: usize) {
         for _ in 0..popcount {
-            pop!(self.stack);
+            self.stack.pop();
         }
     }
 }
@@ -889,6 +879,12 @@ impl<T> Stack<T>
 where
     T: std::fmt::Debug + std::default::Default + Clone,
 {
+    fn new() -> Stack<T> {
+        Stack {
+            data: Vec::with_capacity(STACK_MIN),
+        }
+    }
+
     fn push(&mut self, item: T) {
         assert!(self.data.len() < self.data.capacity(), "stack overflow");
         self.data.push(item);
