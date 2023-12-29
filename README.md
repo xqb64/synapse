@@ -158,10 +158,6 @@ At other times, I tried to keep the instruction set minimal at the expense of pe
 
 Initially, `synapse` used a hand-rolled regex tokenizer, but I found it hard to e.g. report which character was not able to be tokenized, so I rewrote the tokenizer to use `Logos` which could do this trivially -- and, I'm sure it's faster than what I had.
 
-### Hand-rolled stack vs Vec
-
-Initially, `synapse` used the `Vec` as the stack, but as I introduced pointers, this was no longer feasible because `Vec` would reallocate and thus invalidate the pointers -- so a fixed-size stack had to be used.
-
 ## Contributing
 
 Contributors to this project are very welcome -- specifically, suggestions (and PRs) as for how to make the whole system even faster, because I suspect there's still more performance left to be squeezed out.
