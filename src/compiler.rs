@@ -759,7 +759,15 @@ impl<'src> Codegen<'src> for CallExpression<'src> {
                     compiler.emit_opcodes(&[Opcode::Deref]);
                 }
 
-                compiler.emit_opcodes(&[Opcode::CallMethod(getexpr.member.to_string().into())]);
+                for argument in &self.arguments {
+                    argument.codegen(compiler)?;
+                }
+
+                let method_name_idx = compiler.add_string(getexpr.member);
+
+                compiler.emit_opcodes(&[Opcode::CallMethod]);
+                compiler.emit_u32(method_name_idx as u32);
+                compiler.emit_u32(self.arguments.len() as u32);
             }
             _ => unreachable!(),
         }
@@ -1001,7 +1009,7 @@ pub enum Opcode {
     Jmp(usize),
     Jz(usize),
     Call(usize),
-    CallMethod(Rc<String>),
+    CallMethod,
     Ret,
     Deepget(usize),
     DeepgetPtr(usize),

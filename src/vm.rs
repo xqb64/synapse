@@ -95,7 +95,7 @@ where
                 Opcode::Jmp(addr) => self.handle_op_jmp(*addr),
                 Opcode::Jz(addr) => self.handle_op_jz(*addr),
                 Opcode::Call(argcount) => self.handle_op_call(*argcount),
-                Opcode::CallMethod(method) => self.handle_op_call_method(method)?,
+                Opcode::CallMethod => self.handle_op_call_method()?,
                 Opcode::Ret => self.handle_op_ret(),
                 Opcode::Deepget(idx) => self.handle_op_deepget(*idx),
                 Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(*idx),
@@ -390,8 +390,11 @@ where
         });
     }
 
-    fn handle_op_call_method(&mut self, method: &'src str) -> Result<()> {
-        let object = self.stack.peek();
+    fn handle_op_call_method(&mut self) -> Result<()> {
+        let method_name_idx = self.read_u32()?;
+        let argcount = self.read_u32()?;
+
+        let object = self.stack.peek(argcount as usize);
 
         let object_type = if let Object::Struct(structobj) = object {
             structobj.borrow().name
@@ -402,7 +405,18 @@ where
         // It's safe to .unwrap() here because the blueprint must have been defined already.
         let blueprint = self.blueprints.get(object_type).unwrap();
 
-        if let Some(method) = blueprint.methods.get(method) {
+        let method_name = self.bytecode.sp[method_name_idx as usize];
+
+        if let Some(method) = blueprint.methods.get(method_name) {
+            if argcount as usize != method.paramcount - 1 {
+                bail!(
+                    "vm: method '{}' expects {} arguments, got {}",
+                    method.name,
+                    method.paramcount - 1,
+                    argcount
+                );
+            }
+
             self.frame_ptrs.push(BytecodePtr {
                 ptr: self.ip,
                 location: self.stack.len() - method.paramcount,
@@ -410,7 +424,11 @@ where
 
             self.ip = method.location;
         } else {
-            bail!("vm: struct '{}' has no method '{}'", object_type, method);
+            bail!(
+                "vm: struct '{}' has no method '{}'",
+                object_type,
+                method_name
+            );
         }
 
         Ok(())
@@ -895,9 +913,9 @@ where
         unsafe { self.data.pop().unwrap_unchecked() }
     }
 
-    fn peek(&mut self) -> &T {
+    fn peek(&mut self, n: usize) -> &T {
         assert!(!self.data.is_empty(), "peeked an empty stack");
-        unsafe { self.data.last().unwrap_unchecked() }
+        unsafe { self.data.get_unchecked(self.data.len() - 1 - n) }
     }
 
     fn len(&self) -> usize {

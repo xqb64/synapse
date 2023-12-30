@@ -3,18 +3,20 @@ struct person {
 }
 
 impl person {
-  fn say(self) {
-    self.say_name();
+  fn say(self, prefix, suffix) {
+    self.say_name(prefix, suffix);
     return 0;
   }
-  fn say_name(self) {
-    print "Hello, " ++ self.name ++ ".";
+  fn say_name(self, prefix, suffix) {
+    print prefix ++ self.name ++ suffix;
     return 0;
   }
 }
 
 fn main() {
   p = person { name: "John" };
-  p.say();
+  prefix = "Hello, ";
+  suffix = ".";
+  p.say(prefix, suffix);
   return 0;
 }
