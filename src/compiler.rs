@@ -536,11 +536,7 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
 
         let src = read_file(self.module)?;
        
-        compiler.set_current_src(src);
-
-        let current_src = compiler.current_src.clone();
-
-        let mut tokenizer = Tokenizer::new(&current_src);
+        let mut tokenizer = Tokenizer::new(&src);
         let mut parser = Parser::default();
 
         let Some(tokens) = tokenizer
