@@ -42,6 +42,9 @@ pub enum Token<'src> {
     #[token("impl")]
     Impl,
 
+    #[token("use")]
+    Use,
+
     #[token("true")]
     True,
 
@@ -221,7 +224,7 @@ pub struct Tokenizer<'src> {
 impl<'src> Tokenizer<'src> {
     pub fn new(src: &'src str) -> Tokenizer<'src> {
         Tokenizer {
-            lexer: Token::lexer(src),
+            lexer: Token::lexer(&src),
         }
     }
 

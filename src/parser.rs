@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 pub struct Parser<'src> {
     current: Option<Token<'src>>,
     previous: Option<Token<'src>>,
-    tokens: Option<&'src mut VecDeque<Token<'src>>>,
+    tokens: Option<VecDeque<Token<'src>>>,
 }
 
 impl<'src> Parser<'src> {
@@ -19,7 +19,7 @@ impl<'src> Parser<'src> {
 
     pub fn parse(
         &mut self,
-        tokens: &'src mut VecDeque<Token<'src>>,
+        tokens: VecDeque<Token<'src>>,
     ) -> Result<Vec<Statement<'src>>> {
         self.tokens = Some(tokens);
         self.advance();
@@ -67,6 +67,8 @@ impl<'src> Parser<'src> {
             self.parse_struct_statement()
         } else if self.is_next(&[Token::Impl]) {
             self.parse_impl_statement()
+        } else if self.is_next(&[Token::Use]) {
+            self.parse_use_statement()
         } else {
             bail!("parser: expected a declaration (like 'fn' or 'struct')");
         }
@@ -225,6 +227,15 @@ impl<'src> Parser<'src> {
         }
 
         Ok(Statement::Impl(ImplStatement { name, methods }))
+    }
+
+    fn parse_use_statement(&mut self) -> Result<Statement<'src>> {
+        let module = match self.consume(Token::String("")) {
+            Some(Token::String(string)) => string,
+            Some(_) | None => bail!("parser: expected module after use"),
+        };
+        self.consume(Token::Semicolon);
+        Ok(Statement::Use(UseStatement { module }))
     }
 
     fn parse_block_statement(&mut self) -> Result<Statement<'src>> {
@@ -603,6 +614,7 @@ pub enum Statement<'src> {
     Continue(ContinueStatement),
     Struct(StructStatement<'src>),
     Impl(ImplStatement<'src>),
+    Use(UseStatement<'src>),
     Block(BlockStatement<'src>),
     Expression(ExpressionStatement<'src>),
     Dummy,
@@ -662,6 +674,11 @@ pub struct StructStatement<'src> {
 pub struct ImplStatement<'src> {
     pub name: &'src str,
     pub methods: Vec<Statement<'src>>,
+}
+
+#[derive(Debug)]
+pub struct UseStatement<'src> {
+    pub module: &'src str,
 }
 
 #[derive(Debug)]

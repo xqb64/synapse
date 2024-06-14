@@ -4,11 +4,11 @@ use crate::parser::{
     GetExpression, IfStatement, ImplStatement, Literal, LiteralExpression, LogicalExpression,
     PrintStatement, ReturnStatement, Statement, StructExpression, StructInitializerExpression,
     StructStatement, SubscriptExpression, UnaryExpression, VariableExpression, VecExpression,
-    WhileStatement,
+    WhileStatement, UseStatement,
 };
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 const CAPACITY_MIN: usize = 1024;
@@ -23,16 +23,11 @@ pub struct Compiler<'src> {
     loop_starts: Vec<usize>,
     loop_depths: Vec<usize>,
     depth: usize,
-}
-
-impl Default for Compiler<'_> {
-    fn default() -> Self {
-        Self::new()
-    }
+    current_src: Rc<String>,
 }
 
 impl<'src> Compiler<'src> {
-    pub fn new() -> Self {
+    pub fn new(current_src: String) -> Self {
         Compiler {
             bytecode: Bytecode::default(),
             functions: HashMap::with_capacity(CAPACITY_MIN),
@@ -43,7 +38,12 @@ impl<'src> Compiler<'src> {
             loop_starts: Vec::with_capacity(CAPACITY_MIN),
             loop_depths: Vec::with_capacity(CAPACITY_MIN),
             depth: 0,
+            current_src: Rc::new(current_src),
         }
+    }
+
+    pub fn set_current_src(&mut self, current_src: String) {
+        self.current_src = Rc::new(current_src);
     }
 
     pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&Bytecode<'src>> {
@@ -267,6 +267,7 @@ impl<'src> Codegen<'src> for Statement<'src> {
             Statement::Block(block_statement) => block_statement.codegen(compiler)?,
             Statement::Struct(struct_statement) => struct_statement.codegen(compiler)?,
             Statement::Impl(impl_statement) => impl_statement.codegen(compiler)?,
+            Statement::Use(use_statement) => use_statement.codegen(compiler)?,
             Statement::Dummy => {}
         }
 
@@ -522,6 +523,43 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
         } else {
             bail!("compiler: struct '{}' is not defined", self.name);
         }
+
+        Ok(())
+    }
+}
+
+impl<'src> Codegen<'src> for UseStatement<'src> {
+    fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
+        use crate::tokenizer::Tokenizer;
+        use crate::parser::Parser;
+        use crate::util::read_file;
+
+        let src = read_file(self.module)?;
+       
+        compiler.set_current_src(src);
+
+        let current_src = compiler.current_src.clone();
+
+        let mut tokenizer = Tokenizer::new(&current_src);
+        let mut parser = Parser::default();
+
+        let Some(tokens) = tokenizer
+            .by_ref()
+            .map(|token| {
+                if token != Token::Error {
+                    Some(token)
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<VecDeque<Token<'_>>>>()
+        else {
+            let unrecognized = tokenizer.get_lexer().slice();
+            bail!("tokenizer: unexpected token: {}", unrecognized);
+        };
+
+        let ast = parser.parse(tokens)?;
+        let _bytecode = compiler.compile(&ast)?;
 
         Ok(())
     }

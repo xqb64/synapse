@@ -24,7 +24,7 @@ fn run(path: &str) -> Result<()> {
 
     let mut tokenizer = Tokenizer::new(&src);
     let mut parser = Parser::default();
-    let mut compiler = Compiler::default();
+    let mut compiler = Compiler::new(&src);
 
     let Some(mut tokens) = tokenizer
         .by_ref()
