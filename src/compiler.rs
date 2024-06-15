@@ -9,7 +9,6 @@ use crate::parser::{
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
 use bumpalo::Bump;
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
@@ -26,14 +25,15 @@ pub struct Compiler<'src> {
     loop_depths: Vec<usize>,
     depth: usize,
     arena: &'src Bump,
-    root_mod: Rc<RefCell<Module>>,
-    current_mod: Rc<RefCell<Module>>,
-    cached_mods: HashMap<&'src str, Rc<RefCell<Module>>>,
+    root_mod: *mut Module,
+    current_mod: *mut Module,
+    cached_mods: HashMap<String, *mut Module>,
 }
 
 impl<'src> Compiler<'src> {
     pub fn new(arena: &'src Bump, root_mod: &'src str) -> Self {
-        let m = Rc::new(RefCell::new(Module { parent: None, imports: vec![], path: root_mod.to_string() }));
+        let m = Module { parent: None, imports: vec![], path: root_mod.to_string() };
+        let mptr = arena.alloc(m) as *mut Module;
 
         Compiler {
             bytecode: Bytecode::default(),
@@ -46,8 +46,8 @@ impl<'src> Compiler<'src> {
             loop_depths: Vec::with_capacity(CAPACITY_MIN),
             depth: 0,
             arena,
-            root_mod: m.clone(),
-            current_mod: m,
+            root_mod: mptr,
+            current_mod: mptr,
             cached_mods: HashMap::new(),
         }
     }
@@ -57,29 +57,63 @@ impl<'src> Compiler<'src> {
             statement.codegen(self)?;
         }
 
-        if self.current_mod.borrow().path == self.root_mod.borrow().path {
-            match self.functions.get("main").cloned() {
-                Some(f) => {
-                    self.emit_opcodes(&[Opcode::Call(0)]);
-                    self.emit_opcodes(&[Opcode::Jmp(f.location)]);
-                    self.emit_opcodes(&[Opcode::Pop(1)]);
+        unsafe {
+            if (*self.current_mod).path == (*self.root_mod).path {
+                match self.functions.get("main").cloned() {
+                    Some(f) => {
+                        self.emit_opcodes(&[Opcode::Call(0)]);
+                        self.emit_opcodes(&[Opcode::Jmp(f.location)]);
+                        self.emit_opcodes(&[Opcode::Pop(1)]);
+                    }
+                    None => bail!("compiler: main fn was not defined"),
                 }
-                None => bail!("compiler: main fn was not defined"),
-            }
-
-            self.emit_opcodes(&[Opcode::Halt]);
+    
+                self.emit_opcodes(&[Opcode::Halt]);
+            }    
         }
-
-        self.print_module_tree(&self.root_mod);
 
         Ok(&self.bytecode)
     }
 
-    fn print_module_tree(&self, module: &Rc<RefCell<Module>>) {
-        println!("{:?}", module);
-        println!("module.imports has {} imports", module.borrow().imports.len());
-        for imported_module in &module.borrow().imports {
-            self.print_module_tree(&imported_module);
+    fn is_last(&self, parent: *mut Module, child: *mut Module) -> bool {
+        unsafe {
+            if let Some(l) = (*parent).imports.last() {
+                if (**l).path == (*child).path {
+                    return true;
+                }
+            } else {
+                println!("no last");
+            }
+        }
+        false
+    }
+
+    fn print_prefix(&self, depth: usize, last: bool) {
+        for i in 0..depth {
+            if i == 0 {
+                continue;
+            }
+            if last {
+                print!("  ");
+            } else {
+                print!("┃ ");
+            }
+        }
+    }
+
+    fn print_module_tree(&self, module: *mut Module, depth: usize) {
+        if depth == 0 {
+            println!("{}", unsafe { (*module).path.clone() });
+        } else {
+            let last = self.is_last(unsafe { (*module).parent.unwrap() }, module);
+            let grandpa_last = unsafe {(*module).parent.is_some() && (*(*module).parent.unwrap()).parent.is_some() } && self.is_last(unsafe { (*(*module).parent.unwrap()).parent.unwrap() }, unsafe { (*module).parent.unwrap() });
+            self.print_prefix(depth, grandpa_last);
+            println!("{} {}", if last { "┗━" } else { "┣━" }, unsafe { (*module).path.clone() });
+        }
+        unsafe {
+            for imported_module in &(*module).imports {
+                self.print_module_tree(*imported_module, depth+1);
+            }
         }
     }
 
@@ -548,9 +582,9 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
 
 #[derive(Debug, Clone)]
 struct Module {
-    parent: Option<Rc<RefCell<Module>>>,
+    parent: Option<*mut Module>,
     path: String,
-    imports: Vec<Rc<RefCell<Module>>>,
+    imports: Vec<*mut Module>,
 }
 
 impl<'src> Codegen<'src> for UseStatement<'src> {
@@ -559,21 +593,25 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         use crate::tokenizer::Tokenizer;
         use crate::util::read_file;
 
-        if let Some(cached_mod) = compiler.cached_mods.get(&self.module) {
-            let mut m = cached_mod.clone();
-            m.borrow_mut().parent = Some(compiler.current_mod.clone());
-            compiler.current_mod.borrow_mut().imports.push(m);
+        if let Some(cached_mod) = compiler.cached_mods.get(&self.module.to_string()) {
+            let m = cached_mod;
+            unsafe { 
+                (*(*m)).parent = Some(compiler.current_mod);
+                (*compiler.current_mod).imports.push(*m);
+            }
         } else {
-            let mut old_module = compiler.current_mod.clone();
-            
-            let m = Module { parent: Some(old_module.clone()), imports: vec![], path: self.module.to_string() };
-            compiler.cached_mods.insert(self.module, Rc::new(RefCell::new(m.clone())));
-            
-            compiler.current_mod = Rc::new(RefCell::new(m));
+            let old_module = compiler.current_mod;            
+            let m = Module { parent: Some(old_module), imports: vec![], path: self.module.to_string() };
 
-            println!("inserting {} into old_module {}", compiler.current_mod.borrow().path, old_module.borrow().path);
+            let mptr = compiler.arena.alloc(m) as *mut Module;
 
-            old_module.borrow_mut().imports.push(compiler.current_mod.clone());
+            unsafe {
+                (*old_module).imports.push(mptr);
+            }
+            
+            compiler.current_mod = mptr;
+
+            compiler.cached_mods.insert(self.module.to_string(), mptr);
     
             let src = compiler.arena.alloc_str(&read_file(self.module)?);
     
@@ -599,8 +637,10 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
     
             let _bytecode = compiler.compile(&ast)?.clone();
     
-            compiler.current_mod = old_module;    
+            compiler.current_mod = old_module;
         }
+
+        compiler.print_module_tree(compiler.root_mod, 0);
 
         Ok(())
     }
