@@ -8,6 +8,7 @@ use crate::parser::{
 };
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
+use bumpalo::Bump;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
@@ -23,11 +24,11 @@ pub struct Compiler<'src> {
     loop_starts: Vec<usize>,
     loop_depths: Vec<usize>,
     depth: usize,
-    current_src: Rc<String>,
+    arena: &'src Bump,
 }
 
 impl<'src> Compiler<'src> {
-    pub fn new(current_src: String) -> Self {
+    pub fn new(arena: &'src Bump) -> Self {
         Compiler {
             bytecode: Bytecode::default(),
             functions: HashMap::with_capacity(CAPACITY_MIN),
@@ -38,12 +39,8 @@ impl<'src> Compiler<'src> {
             loop_starts: Vec::with_capacity(CAPACITY_MIN),
             loop_depths: Vec::with_capacity(CAPACITY_MIN),
             depth: 0,
-            current_src: Rc::new(current_src),
+            arena,
         }
-    }
-
-    pub fn set_current_src(&mut self, current_src: String) {
-        self.current_src = Rc::new(current_src);
     }
 
     pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&Bytecode<'src>> {
@@ -534,9 +531,9 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         use crate::parser::Parser;
         use crate::util::read_file;
 
-        let src = read_file(self.module)?;
+        let src = compiler.arena.alloc_str(&read_file(self.module)?);
        
-        let mut tokenizer = Tokenizer::new(&src);
+        let mut tokenizer = Tokenizer::new(src);
         let mut parser = Parser::default();
 
         let Some(tokens) = tokenizer
@@ -555,7 +552,12 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         };
 
         let ast = parser.parse(tokens)?;
-        let _bytecode = compiler.compile(&ast)?;
+
+        let bytecode = compiler.compile(&ast)?.clone();
+
+        for opcode in &bytecode.code {
+            compiler.bytecode.code.push(opcode.clone());
+        }
 
         Ok(())
     }

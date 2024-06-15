@@ -11,6 +11,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+bumpalo = "3.16.0"
 logos = "0.13.0"
 
 [dev-dependencies]

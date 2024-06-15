@@ -222,9 +222,9 @@ pub struct Tokenizer<'src> {
 }
 
 impl<'src> Tokenizer<'src> {
-    pub fn new(src: &'src str) -> Tokenizer<'src> {
+    pub fn new(src: &'src mut str) -> Tokenizer<'src> {
         Tokenizer {
-            lexer: Token::lexer(&src),
+            lexer: Token::lexer(src),
         }
     }
 

@@ -10,7 +10,7 @@ use synapse::vm::VM;
 
 fn criterion_benchmark_fib30(c: &mut Criterion) -> Result<()> {
     let src = read_file("benches/cases/fib30.syn").unwrap();
-    let mut tokenizer = Tokenizer::new(&src);
+    // let mut tokenizer = Tokenizer::new(&src);
     let mut parser = Parser::default();
     let mut compiler = Compiler::default();
 
