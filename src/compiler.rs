@@ -25,12 +25,15 @@ pub struct Compiler<'src> {
     loop_depths: Vec<usize>,
     depth: usize,
     arena: &'src Bump,
-    root_mod: &'src str,
-    current_mod: &'src str,
+    root_mod: Box<Module>,
+    current_mod: Box<Module>,
+    cached_mods: HashMap<&'src str, Box<Module>>,
 }
 
 impl<'src> Compiler<'src> {
     pub fn new(arena: &'src Bump, root_mod: &'src str) -> Self {
+        let m = Box::new(Module { parent: None, imports: vec![], path: root_mod.to_string() });
+
         Compiler {
             bytecode: Bytecode::default(),
             functions: HashMap::with_capacity(CAPACITY_MIN),
@@ -42,8 +45,9 @@ impl<'src> Compiler<'src> {
             loop_depths: Vec::with_capacity(CAPACITY_MIN),
             depth: 0,
             arena,
-            root_mod,
-            current_mod: root_mod,
+            root_mod: m.clone(),
+            current_mod: m,
+            cached_mods: HashMap::new(),
         }
     }
 
@@ -52,7 +56,7 @@ impl<'src> Compiler<'src> {
             statement.codegen(self)?;
         }
 
-        if self.current_mod == self.root_mod {
+        if self.current_mod.path == self.root_mod.path {
             match self.functions.get("main").cloned() {
                 Some(f) => {
                     self.emit_opcodes(&[Opcode::Call(0)]);
@@ -65,7 +69,17 @@ impl<'src> Compiler<'src> {
             self.emit_opcodes(&[Opcode::Halt]);
         }
 
+        self.print_module_tree(&self.root_mod);
+
         Ok(&self.bytecode)
+    }
+
+    fn print_module_tree(&self, module: &Box<Module>) {
+        println!("{:?}", module);
+        println!("module.imports has {} imports", module.imports.len());
+        for imported_module in &module.imports {
+            self.print_module_tree(&imported_module);
+        }
     }
 
     fn compile_variable_assignment(
@@ -531,41 +545,61 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Module {
+    parent: Option<Box<Module>>,
+    path: String,
+    imports: Vec<Box<Module>>,
+}
+
 impl<'src> Codegen<'src> for UseStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         use crate::parser::Parser;
         use crate::tokenizer::Tokenizer;
         use crate::util::read_file;
 
-        let old_module = compiler.current_mod;
+        if let Some(cached_mod) = compiler.cached_mods.get(&self.module) {
+            let mut m = cached_mod.clone();
+            m.parent = Some(compiler.current_mod.clone());
+            compiler.current_mod.imports.push(m);
+        } else {
+            let mut old_module = compiler.current_mod.clone();
+            
+            let m = Module { parent: Some(old_module.clone()), imports: vec![], path: self.module.to_string() };
+            compiler.cached_mods.insert(self.module, Box::new(m.clone()));
+            
+            compiler.current_mod = Box::new(m);
 
-        compiler.current_mod = self.module;
+            println!("inserting {} into old_module {}", compiler.current_mod.path, old_module.path);
 
-        let src = compiler.arena.alloc_str(&read_file(self.module)?);
-
-        let mut tokenizer = Tokenizer::new(src);
-        let mut parser = Parser::default();
-
-        let Some(tokens) = tokenizer
-            .by_ref()
-            .map(|token| {
-                if token != Token::Error {
-                    Some(token)
-                } else {
-                    None
-                }
-            })
-            .collect::<Option<VecDeque<Token<'_>>>>()
-        else {
-            let unrecognized = tokenizer.get_lexer().slice();
-            bail!("tokenizer: unexpected token: {}", unrecognized);
-        };
-
-        let ast = parser.parse(tokens)?;
-
-        let _bytecode = compiler.compile(&ast)?.clone();
-
-        compiler.current_mod = old_module;
+            old_module.imports.push(compiler.current_mod.clone());
+    
+            let src = compiler.arena.alloc_str(&read_file(self.module)?);
+    
+            let mut tokenizer = Tokenizer::new(src);
+            let mut parser = Parser::default();
+    
+            let Some(tokens) = tokenizer
+                .by_ref()
+                .map(|token| {
+                    if token != Token::Error {
+                        Some(token)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Option<VecDeque<Token<'_>>>>()
+            else {
+                let unrecognized = tokenizer.get_lexer().slice();
+                bail!("tokenizer: unexpected token: {}", unrecognized);
+            };
+    
+            let ast = parser.parse(tokens)?;
+    
+            let _bytecode = compiler.compile(&ast)?.clone();
+    
+            compiler.current_mod = old_module;    
+        }
 
         Ok(())
     }
