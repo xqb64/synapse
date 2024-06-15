@@ -93,11 +93,7 @@ impl<'src> Compiler<'src> {
             if i == 0 {
                 continue;
             }
-            if last {
-                print!("  ");
-            } else {
-                print!("┃ ");
-            }
+            print!("{}", if last { "  "} else { "┃ " });
         }
     }
 
@@ -105,11 +101,17 @@ impl<'src> Compiler<'src> {
         if depth == 0 {
             println!("{}", unsafe { (*module).path.clone() });
         } else {
-            let last = self.is_last(unsafe { (*module).parent.unwrap() }, module);
-            let grandpa_last = unsafe {(*module).parent.is_some() && (*(*module).parent.unwrap()).parent.is_some() } && self.is_last(unsafe { (*(*module).parent.unwrap()).parent.unwrap() }, unsafe { (*module).parent.unwrap() });
+            let parent = unsafe { (*module).parent };
+            let grandpa = unsafe { (*parent.unwrap()).parent };
+
+            let last = parent.is_some() && self.is_last(parent.unwrap(), module);
+            let grandpa_last = grandpa.is_some() && self.is_last(grandpa.unwrap(), parent.unwrap());
+
             self.print_prefix(depth, grandpa_last);
+
             println!("{} {}", if last { "┗━" } else { "┣━" }, unsafe { (*module).path.clone() });
         }
+
         unsafe {
             for imported_module in &(*module).imports {
                 self.print_module_tree(*imported_module, depth+1);
