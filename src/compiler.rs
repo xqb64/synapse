@@ -3,8 +3,8 @@ use crate::parser::{
     CallExpression, ContinueStatement, Expression, ExpressionStatement, FnStatement, ForStatement,
     GetExpression, IfStatement, ImplStatement, Literal, LiteralExpression, LogicalExpression,
     PrintStatement, ReturnStatement, Statement, StructExpression, StructInitializerExpression,
-    StructStatement, SubscriptExpression, UnaryExpression, VariableExpression, VecExpression,
-    WhileStatement, UseStatement,
+    StructStatement, SubscriptExpression, UnaryExpression, UseStatement, VariableExpression,
+    VecExpression, WhileStatement,
 };
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
@@ -61,7 +61,7 @@ impl<'src> Compiler<'src> {
                 }
                 None => bail!("compiler: main fn was not defined"),
             }
-    
+
             self.emit_opcodes(&[Opcode::Halt]);
         }
 
@@ -533,8 +533,8 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
 
 impl<'src> Codegen<'src> for UseStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
-        use crate::tokenizer::Tokenizer;
         use crate::parser::Parser;
+        use crate::tokenizer::Tokenizer;
         use crate::util::read_file;
 
         let old_module = compiler.current_mod;
@@ -542,7 +542,7 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         compiler.current_mod = self.module;
 
         let src = compiler.arena.alloc_str(&read_file(self.module)?);
-       
+
         let mut tokenizer = Tokenizer::new(src);
         let mut parser = Parser::default();
 

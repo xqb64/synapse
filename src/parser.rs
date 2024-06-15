@@ -17,10 +17,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub fn parse(
-        &mut self,
-        tokens: VecDeque<Token<'src>>,
-    ) -> Result<Vec<Statement<'src>>> {
+    pub fn parse(&mut self, tokens: VecDeque<Token<'src>>) -> Result<Vec<Statement<'src>>> {
         self.tokens = Some(tokens);
         self.advance();
         let mut statements = vec![];
