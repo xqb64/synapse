@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use bumpalo::Bump;
 use std::collections::VecDeque;
 use std::env;
-use synapse::compiler::{Bytecode, Compiler};
+use synapse::compiler::Compiler;
 use synapse::parser::Parser;
 use synapse::tokenizer::{Token, Tokenizer};
 use synapse::util::read_file;
@@ -20,16 +20,16 @@ fn main() {
     }
 }
 
-fn run<'src>(path: &str) -> Result<&'src Bytecode<'src>> {
+fn run(path: &str) -> Result<()> {
     let arena = Bump::new();
 
     let src = arena.alloc_str(&read_file(path)?);
 
     let mut tokenizer = Tokenizer::new(src);
     let mut parser = Parser::default();
-    let mut compiler = Compiler::new(&arena);
+    let mut compiler = Compiler::new(&arena, path);
 
-    let Some(mut tokens) = tokenizer
+    let Some(tokens) = tokenizer
         .by_ref()
         .map(|token| {
             if token != Token::Error {
@@ -47,5 +47,8 @@ fn run<'src>(path: &str) -> Result<&'src Bytecode<'src>> {
     let ast = parser.parse(tokens)?;
     let bytecode = compiler.compile(&ast)?;
 
-    Ok(bytecode)
+    let mut vm = VM::new(bytecode);
+    vm.exec()?;
+
+    Ok(())
 }

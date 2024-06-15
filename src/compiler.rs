@@ -25,10 +25,12 @@ pub struct Compiler<'src> {
     loop_depths: Vec<usize>,
     depth: usize,
     arena: &'src Bump,
+    root_mod: &'src str,
+    current_mod: &'src str,
 }
 
 impl<'src> Compiler<'src> {
-    pub fn new(arena: &'src Bump) -> Self {
+    pub fn new(arena: &'src Bump, root_mod: &'src str) -> Self {
         Compiler {
             bytecode: Bytecode::default(),
             functions: HashMap::with_capacity(CAPACITY_MIN),
@@ -40,6 +42,8 @@ impl<'src> Compiler<'src> {
             loop_depths: Vec::with_capacity(CAPACITY_MIN),
             depth: 0,
             arena,
+            root_mod,
+            current_mod: root_mod,
         }
     }
 
@@ -48,16 +52,18 @@ impl<'src> Compiler<'src> {
             statement.codegen(self)?;
         }
 
-        match self.functions.get("main").cloned() {
-            Some(f) => {
-                self.emit_opcodes(&[Opcode::Call(0)]);
-                self.emit_opcodes(&[Opcode::Jmp(f.location)]);
-                self.emit_opcodes(&[Opcode::Pop(1)]);
+        if self.current_mod == self.root_mod {
+            match self.functions.get("main").cloned() {
+                Some(f) => {
+                    self.emit_opcodes(&[Opcode::Call(0)]);
+                    self.emit_opcodes(&[Opcode::Jmp(f.location)]);
+                    self.emit_opcodes(&[Opcode::Pop(1)]);
+                }
+                None => bail!("compiler: main fn was not defined"),
             }
-            None => bail!("compiler: main fn was not defined"),
+    
+            self.emit_opcodes(&[Opcode::Halt]);
         }
-
-        self.emit_opcodes(&[Opcode::Halt]);
 
         Ok(&self.bytecode)
     }
@@ -531,6 +537,10 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         use crate::parser::Parser;
         use crate::util::read_file;
 
+        let old_module = compiler.current_mod;
+
+        compiler.current_mod = self.module;
+
         let src = compiler.arena.alloc_str(&read_file(self.module)?);
        
         let mut tokenizer = Tokenizer::new(src);
@@ -555,9 +565,7 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
 
         let bytecode = compiler.compile(&ast)?.clone();
 
-        for opcode in &bytecode.code {
-            compiler.bytecode.code.push(opcode.clone());
-        }
+        compiler.current_mod = old_module;
 
         Ok(())
     }
