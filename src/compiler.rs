@@ -9,6 +9,7 @@ use crate::parser::{
 use crate::tokenizer::Token;
 use anyhow::{bail, Result};
 use bumpalo::Bump;
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
@@ -25,14 +26,14 @@ pub struct Compiler<'src> {
     loop_depths: Vec<usize>,
     depth: usize,
     arena: &'src Bump,
-    root_mod: Box<Module>,
-    current_mod: Box<Module>,
-    cached_mods: HashMap<&'src str, Box<Module>>,
+    root_mod: Rc<RefCell<Module>>,
+    current_mod: Rc<RefCell<Module>>,
+    cached_mods: HashMap<&'src str, Rc<RefCell<Module>>>,
 }
 
 impl<'src> Compiler<'src> {
     pub fn new(arena: &'src Bump, root_mod: &'src str) -> Self {
-        let m = Box::new(Module { parent: None, imports: vec![], path: root_mod.to_string() });
+        let m = Rc::new(RefCell::new(Module { parent: None, imports: vec![], path: root_mod.to_string() }));
 
         Compiler {
             bytecode: Bytecode::default(),
@@ -56,7 +57,7 @@ impl<'src> Compiler<'src> {
             statement.codegen(self)?;
         }
 
-        if self.current_mod.path == self.root_mod.path {
+        if self.current_mod.borrow().path == self.root_mod.borrow().path {
             match self.functions.get("main").cloned() {
                 Some(f) => {
                     self.emit_opcodes(&[Opcode::Call(0)]);
@@ -74,10 +75,10 @@ impl<'src> Compiler<'src> {
         Ok(&self.bytecode)
     }
 
-    fn print_module_tree(&self, module: &Box<Module>) {
+    fn print_module_tree(&self, module: &Rc<RefCell<Module>>) {
         println!("{:?}", module);
-        println!("module.imports has {} imports", module.imports.len());
-        for imported_module in &module.imports {
+        println!("module.imports has {} imports", module.borrow().imports.len());
+        for imported_module in &module.borrow().imports {
             self.print_module_tree(&imported_module);
         }
     }
@@ -547,9 +548,9 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
 
 #[derive(Debug, Clone)]
 struct Module {
-    parent: Option<Box<Module>>,
+    parent: Option<Rc<RefCell<Module>>>,
     path: String,
-    imports: Vec<Box<Module>>,
+    imports: Vec<Rc<RefCell<Module>>>,
 }
 
 impl<'src> Codegen<'src> for UseStatement<'src> {
@@ -560,19 +561,19 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
 
         if let Some(cached_mod) = compiler.cached_mods.get(&self.module) {
             let mut m = cached_mod.clone();
-            m.parent = Some(compiler.current_mod.clone());
-            compiler.current_mod.imports.push(m);
+            m.borrow_mut().parent = Some(compiler.current_mod.clone());
+            compiler.current_mod.borrow_mut().imports.push(m);
         } else {
             let mut old_module = compiler.current_mod.clone();
             
             let m = Module { parent: Some(old_module.clone()), imports: vec![], path: self.module.to_string() };
-            compiler.cached_mods.insert(self.module, Box::new(m.clone()));
+            compiler.cached_mods.insert(self.module, Rc::new(RefCell::new(m.clone())));
             
-            compiler.current_mod = Box::new(m);
+            compiler.current_mod = Rc::new(RefCell::new(m));
 
-            println!("inserting {} into old_module {}", compiler.current_mod.path, old_module.path);
+            println!("inserting {} into old_module {}", compiler.current_mod.borrow().path, old_module.borrow().path);
 
-            old_module.imports.push(compiler.current_mod.clone());
+            old_module.borrow_mut().imports.push(compiler.current_mod.clone());
     
             let src = compiler.arena.alloc_str(&read_file(self.module)?);
     
