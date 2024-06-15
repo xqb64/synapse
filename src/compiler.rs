@@ -563,7 +563,7 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
 
         let ast = parser.parse(tokens)?;
 
-        let bytecode = compiler.compile(&ast)?.clone();
+        let _bytecode = compiler.compile(&ast)?.clone();
 
         compiler.current_mod = old_module;
 
