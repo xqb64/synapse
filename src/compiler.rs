@@ -596,6 +596,9 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         if let Some(cached_mod) = compiler.cached_mods.get(&self.module.to_string()) {
             let m = cached_mod;
             unsafe { 
+                if (**m).imports.contains(&compiler.current_mod) {
+                    bail!("cycle");
+                }
                 (*(*m)).parent = Some(compiler.current_mod);
                 (*compiler.current_mod).imports.push(*m);
             }
