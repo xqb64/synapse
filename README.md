@@ -30,6 +30,7 @@ This project is my second venture into the field of programming language design.
   - `return` is mandatory
   - recursion!
 - methods (taking in `self` as the first parameter)
+- import subsystem
 - `print` statement
 
 Global scope is **NOT** allowed.
