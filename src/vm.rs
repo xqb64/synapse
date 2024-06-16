@@ -113,7 +113,7 @@ where
                 Opcode::VecSet => self.handle_op_vec_set(),
                 Opcode::Subscript => self.handle_op_subscript(),
                 Opcode::Pop(n) => self.handle_op_pop(*n),
-                Opcode::Halt => break,
+                Opcode::Halt => break Ok(()),
                 Opcode::Raw(_) => panic!("vm: raw byte"),
             }
 
@@ -123,8 +123,6 @@ where
 
             self.ip += 1;
         }
-
-        Ok(())
     }
 
     fn read_u32(&mut self) -> Result<u32> {
@@ -448,12 +446,13 @@ where
     /// object at index 'idx' (relative to the current
     /// frame pointer), and pushing it on the stack.
     fn handle_op_deepget(&mut self, idx: usize) {
-        let obj = self
-            .stack
-            .data
-            .get_mut(adjust_idx!(self, idx))
-            .unwrap()
-            .clone();
+        let obj = unsafe {
+            self
+                .stack
+                .data
+                .get_unchecked_mut(adjust_idx!(self, idx))
+                .clone()
+        };
         self.stack.push(obj);
     }
 
