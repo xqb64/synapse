@@ -10,7 +10,6 @@ use crate::tokenizer::Token;
 use anyhow::{bail, Result};
 use bumpalo::Bump;
 use std::collections::{HashMap, VecDeque};
-use std::rc::Rc;
 
 const CAPACITY_MIN: usize = 1024;
 
@@ -65,9 +64,14 @@ impl<'src> Compiler<'src> {
             if (*self.current_mod).path == (*self.root_mod).path {
                 match self.functions.get("main").cloned() {
                     Some(f) => {
-                        self.emit_opcodes(&[Opcode::Call(0)]);
-                        self.emit_opcodes(&[Opcode::Jmp(f.location)]);
-                        self.emit_opcodes(&[Opcode::Pop(1)]);
+                        self.emit_opcodes(&[Opcode::Call]);
+                        self.emit_u32(0);
+
+                        self.emit_opcodes(&[Opcode::Jmp]);
+                        self.emit_u32(f.location as u32 + 4);
+
+                        self.emit_opcodes(&[Opcode::Pop]);
+                        self.emit_u32(1);
                     }
                     None => bail!("compiler: main fn was not defined"),
                 }
@@ -77,6 +81,16 @@ impl<'src> Compiler<'src> {
         }
 
         Ok(&self.bytecode)
+    }
+
+    fn add_const(&mut self, n: f64) -> usize {
+        match self.bytecode.cp.iter().position(|&x| x == n) {
+            Some(idx) => idx,
+            None => {
+                self.bytecode.cp.push(n);
+                self.bytecode.cp.len() - 1
+            }
+        }
     }
 
     fn is_last(&self, parent: *mut Module, child: *mut Module) -> bool {
@@ -135,7 +149,8 @@ impl<'src> Compiler<'src> {
         let (idx, fresh) = self.resolve_local(variable_expr.value);
 
         if is_specialized {
-            self.emit_opcodes(&[Opcode::Deepget(idx)]);
+            self.emit_opcodes(&[Opcode::Deepget]);
+            self.emit_u32(idx as u32);
 
             assign_expr.rhs.codegen(self)?;
             self.handle_specialized_operator(operator);
@@ -144,7 +159,8 @@ impl<'src> Compiler<'src> {
         }
 
         if !fresh {
-            self.emit_opcodes(&[Opcode::Deepset(idx)]);
+            self.emit_opcodes(&[Opcode::Deepset]);
+            self.emit_u32(idx as u32);
         } else {
             match self.pops.last_mut() {
                 Some(last) => *last += 1,
@@ -190,7 +206,10 @@ impl<'src> Compiler<'src> {
         }
 
         if is_specialized {
-            self.emit_opcodes(&[Opcode::Getattr(get_expr.member.to_owned().into())]);
+            let idx = self.add_string(&get_expr.member);
+
+            self.emit_opcodes(&[Opcode::Getattr]);
+            self.emit_u32(idx as u32);
 
             rhs.codegen(self)?;
             self.handle_specialized_operator(operator);
@@ -198,9 +217,12 @@ impl<'src> Compiler<'src> {
             rhs.codegen(self)?;
         }
 
-        self.emit_opcodes(&[Opcode::Setattr(get_expr.member.to_owned().into())]);
+        let setattr_idx = self.add_string(&get_expr.member);
+        self.emit_opcodes(&[Opcode::Setattr]);
+        self.emit_u32(setattr_idx as u32);
 
-        self.emit_opcodes(&[Opcode::Pop(1)]);
+        self.emit_opcodes(&[Opcode::Pop]);
+        self.emit_u32(1);
 
         Ok(())
     }
@@ -256,7 +278,7 @@ impl<'src> Compiler<'src> {
 
     fn emit_opcodes(&mut self, opcodes: &[Opcode]) -> usize {
         for opcode in opcodes {
-            self.bytecode.code.push(opcode.clone());
+            self.bytecode.code.push(opcode.clone().into());
         }
         self.bytecode.code.len() - opcodes.len()
     }
@@ -264,19 +286,20 @@ impl<'src> Compiler<'src> {
     fn emit_u32(&mut self, value: u32) {
         self.bytecode
             .code
-            .push(Opcode::Raw(((value >> 24) & 0xFF) as u8));
+            .push(((value >> 24) & 0xFF) as u8);
         self.bytecode
             .code
-            .push(Opcode::Raw(((value >> 16) & 0xFF) as u8));
+            .push(((value >> 16) & 0xFF) as u8);
         self.bytecode
             .code
-            .push(Opcode::Raw(((value >> 8) & 0xFF) as u8));
-        self.bytecode.code.push(Opcode::Raw((value & 0xFF) as u8));
+            .push(((value >> 8) & 0xFF) as u8);
+        self.bytecode.code.push((value & 0xFF) as u8);
     }
 
     fn emit_stack_cleanup(&mut self) {
         let popcount = self.pops.last().copied().unwrap();
-        self.emit_opcodes(&[Opcode::Pop(popcount)]);
+        self.emit_opcodes(&[Opcode::Pop]);
+        self.emit_u32(popcount as u32);
     }
 
     // clean up the stack and locals,
@@ -284,7 +307,8 @@ impl<'src> Compiler<'src> {
     fn emit_loop_cleanup(&mut self) {
         if let Some(&last_depth) = self.loop_depths.last() {
             for i in last_depth + 1..=self.depth {
-                self.emit_opcodes(&[Opcode::Pop(self.pops[i])]);
+                self.emit_opcodes(&[Opcode::Pop]);
+                self.emit_u32(self.pops[i] as u32);
             }
         }
     }
@@ -300,15 +324,14 @@ impl<'src> Compiler<'src> {
     }
 
     fn patch_jmp(&mut self, idx: usize) {
-        let v = self.bytecode.code.len() - 1;
-        if let Some(opcode) = self.bytecode.code.get_mut(idx) {
-            match opcode {
-                Opcode::Jmp(addr) | Opcode::Jz(addr) => {
-                    *addr = v;
-                }
-                _ => unreachable!(),
-            }
-        }
+        let target = self.bytecode.code.len() - 1;
+
+        println!("patching after {:?}: {:?} to {}", Opcode::from(self.bytecode.code[idx]), &self.bytecode.code[idx+1..idx+5].iter().map(|byte| Opcode::from(*byte)).collect::<Vec<_>>(), target);
+ 
+        self.bytecode.code[idx+1] = ((target >> 24) & 0xFF) as u8;
+        self.bytecode.code[idx+2] = ((target >> 16) & 0xFF) as u8;
+        self.bytecode.code[idx+3] = ((target >> 8) & 0xFF) as u8;
+        self.bytecode.code[idx+4] = (target & 0xFF) as u8;
     }
 }
 
@@ -346,7 +369,8 @@ impl<'src> Codegen<'src> for PrintStatement<'src> {
 
 impl<'src> Codegen<'src> for FnStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
-        let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFFFFFF)]);
+        let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp]);
+        compiler.emit_u32(0xFFFFFFFF);
 
         let arguments: Vec<&'src str> = self
             .arguments
@@ -391,11 +415,13 @@ impl<'src> Codegen<'src> for IfStatement<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         self.condition.codegen(compiler)?;
 
-        let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFFFFFF)]);
+        let jz_idx = compiler.emit_opcodes(&[Opcode::Jz]);
+        compiler.emit_u32(0xFFFFFFFF);
 
         self.if_branch.codegen(compiler)?;
 
-        let else_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFFFFFF)]);
+        let else_idx = compiler.emit_opcodes(&[Opcode::Jmp]);
+        compiler.emit_u32(0xFFFFFFFF);
 
         compiler.patch_jmp(jz_idx);
 
@@ -415,7 +441,8 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
 
         self.condition.codegen(compiler)?;
 
-        let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFFFFFF)]);
+        let jz_idx = compiler.emit_opcodes(&[Opcode::Jz]);
+        compiler.emit_u32(0xFFFFFFFF);
 
         compiler.loop_depths.push(compiler.depth);
 
@@ -423,7 +450,8 @@ impl<'src> Codegen<'src> for WhileStatement<'src> {
 
         compiler.loop_depths.pop();
 
-        compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
+        compiler.emit_opcodes(&[Opcode::Jmp]);
+        compiler.emit_u32(loop_start as u32);
 
         let pop = compiler.breaks.len() - break_count;
         for _ in 0..pop {
@@ -452,15 +480,18 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
 
                 self.condition.codegen(compiler)?;
 
-                let exit_jump = compiler.emit_opcodes(&[Opcode::Jz(0xFFFFFFFF)]);
+                let exit_jump = compiler.emit_opcodes(&[Opcode::Jz]);
+                compiler.emit_u32(0xFFFFFFFF);
 
-                let jump_over_advancement = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFFFFFF)]);
+                let jump_over_advancement = compiler.emit_opcodes(&[Opcode::Jmp]);
+                compiler.emit_u32(0xFFFFFFFF);
 
                 let loop_continuation = compiler.bytecode.code.len() - 1;
 
                 self.advancement.codegen(compiler)?;
 
-                compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
+                compiler.emit_opcodes(&[Opcode::Jmp]);
+                compiler.emit_u32(loop_start as u32);
 
                 compiler.patch_jmp(jump_over_advancement);
 
@@ -474,7 +505,8 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
 
                 compiler.loop_depths.pop();
 
-                compiler.emit_opcodes(&[Opcode::Jmp(loop_continuation)]);
+                compiler.emit_opcodes(&[Opcode::Jmp]);
+                compiler.emit_u32(loop_continuation as u32);
 
                 let pop = compiler.breaks.len() - break_count;
                 for _ in 0..pop {
@@ -487,7 +519,8 @@ impl<'src> Codegen<'src> for ForStatement<'src> {
 
                 compiler.patch_jmp(exit_jump);
 
-                compiler.emit_opcodes(&[Opcode::Pop(1)]);
+                compiler.emit_opcodes(&[Opcode::Pop]);
+                compiler.emit_u32(1);
             }
         }
 
@@ -500,7 +533,8 @@ impl<'src> Codegen<'src> for BreakStatement {
         if !compiler.loop_starts.is_empty() {
             compiler.emit_loop_cleanup();
 
-            let break_jump = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFFFFFF)]);
+            let break_jump = compiler.emit_opcodes(&[Opcode::Jmp]);
+            compiler.emit_u32(0xFFFFFFFF);
 
             compiler.breaks.push(break_jump);
         } else {
@@ -518,7 +552,8 @@ impl<'src> Codegen<'src> for ContinueStatement {
 
             compiler.emit_loop_cleanup();
 
-            compiler.emit_opcodes(&[Opcode::Jmp(loop_start)]);
+            compiler.emit_opcodes(&[Opcode::Jmp]);
+            compiler.emit_u32(loop_start as u32);
         } else {
             bail!("compiler: continue outside a loop");
         }
@@ -578,7 +613,7 @@ impl<'src> Codegen<'src> for ImplStatement<'src> {
                 let method_name_idx = compiler.add_string(method_name);
                 compiler.emit_u32(method_name_idx as u32);
                 compiler.emit_u32(method.paramcount as u32);
-                compiler.emit_u32(method.location as u32);
+                compiler.emit_u32(method.location as u32 + 4);
             }
         } else {
             bail!("compiler: struct '{}' is not defined", self.name);
@@ -674,7 +709,8 @@ impl<'src> Codegen<'src> for ExpressionStatement<'src> {
         match &self.expression {
             Expression::Call(call_expr) => {
                 call_expr.codegen(compiler)?;
-                compiler.emit_opcodes(&[Opcode::Pop(1)]);
+                compiler.emit_opcodes(&[Opcode::Pop]);
+                compiler.emit_u32(1);
             }
 
             Expression::Assign(assign_expr) => {
@@ -693,7 +729,8 @@ impl<'src> Codegen<'src> for ReturnStatement<'src> {
 
         let mut deepset_no = compiler.locals.len().saturating_sub(1);
         for _ in 0..compiler.locals.len() {
-            compiler.emit_opcodes(&[Opcode::Deepset(deepset_no)]);
+            compiler.emit_opcodes(&[Opcode::Deepset]);
+            compiler.emit_u32(deepset_no as u32);
 
             deepset_no = deepset_no.saturating_sub(1);
         }
@@ -751,7 +788,9 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         match &self.value {
             Literal::Num(n) => {
-                compiler.emit_opcodes(&[Opcode::Const(*n)]);
+                compiler.emit_opcodes(&[Opcode::Const]);
+                let idx = compiler.add_const(*n);
+                compiler.emit_u32(idx as u32);
             }
 
             Literal::Bool(b) => match b {
@@ -764,7 +803,9 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
             },
 
             Literal::String(s) => {
-                compiler.emit_opcodes(&[Opcode::Str(s.to_string().into())]);
+                let idx = compiler.add_string(s);
+                compiler.emit_opcodes(&[Opcode::Str]);
+                compiler.emit_u32(idx as u32);
             }
 
             Literal::Null => {
@@ -779,7 +820,8 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
 impl<'src> Codegen<'src> for VariableExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let (idx, _) = compiler.resolve_local(self.value);
-        compiler.emit_opcodes(&[Opcode::Deepget(idx)]);
+        compiler.emit_opcodes(&[Opcode::Deepget]);
+        compiler.emit_u32(idx as u32);
 
         Ok(())
     }
@@ -890,9 +932,11 @@ impl<'src> Codegen<'src> for CallExpression<'src> {
                     argument.codegen(compiler)?;
                 }
 
-                compiler.emit_opcodes(&[Opcode::Call(self.arguments.len())]);
+                compiler.emit_opcodes(&[Opcode::Call]);
+                compiler.emit_u32(self.arguments.len() as u32);
 
-                compiler.emit_opcodes(&[Opcode::Jmp(addr)]);
+                compiler.emit_opcodes(&[Opcode::Jmp]);
+                compiler.emit_u32(addr as u32 + 4);
             }
             Expression::Get(getexpr) => {
                 getexpr.expr.codegen(compiler)?;
@@ -970,11 +1014,13 @@ impl<'src> Codegen<'src> for LogicalExpression<'src> {
 
         match self.op {
             Token::DoubleAmpersand => {
-                let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFFFFFF)]);
+                let jz_idx = compiler.emit_opcodes(&[Opcode::Jz]);
+                compiler.emit_u32(0xFFFFFFFF);
 
                 self.rhs.codegen(compiler)?;
 
-                let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFFFFFF)]);
+                let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp]);
+                compiler.emit_u32(0xFFFFFFFF);
 
                 compiler.patch_jmp(jz_idx);
                 compiler.emit_opcodes(&[Opcode::False]);
@@ -982,11 +1028,13 @@ impl<'src> Codegen<'src> for LogicalExpression<'src> {
             }
 
             Token::DoublePipe => {
-                let jz_idx = compiler.emit_opcodes(&[Opcode::Jz(0xFFFFFFFF)]);
+                let jz_idx = compiler.emit_opcodes(&[Opcode::Jz]);
+                compiler.emit_u32(0xFFFFFFFF);
 
                 compiler.emit_opcodes(&[Opcode::False, Opcode::Not]);
 
-                let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp(0xFFFFFFFF)]);
+                let jmp_idx = compiler.emit_opcodes(&[Opcode::Jmp]);
+                compiler.emit_u32(0xFFFFFFFF);
 
                 compiler.patch_jmp(jz_idx);
 
@@ -1017,7 +1065,8 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
             Token::Ampersand => match &*self.expr {
                 Expression::Variable(var) => {
                     let (idx, _) = compiler.resolve_local(var.value);
-                    compiler.emit_opcodes(&[Opcode::DeepgetPtr(idx)]);
+                    compiler.emit_opcodes(&[Opcode::DeepgetPtr]);
+                    compiler.emit_u32(idx as u32);
                 }
 
                 Expression::Get(getexp) => {
@@ -1027,7 +1076,10 @@ impl<'src> Codegen<'src> for UnaryExpression<'src> {
                         compiler.emit_opcodes(&[Opcode::Deref]);
                     }
 
-                    compiler.emit_opcodes(&[Opcode::GetattrPtr(getexp.member.to_string().into())]);
+                    let idx = compiler.add_string(getexp.member);
+
+                    compiler.emit_opcodes(&[Opcode::GetattrPtr]);
+                    compiler.emit_u32(idx as u32);
                 }
 
                 _ => bail!("compiler: expected variable"),
@@ -1058,7 +1110,10 @@ impl<'src> Codegen<'src> for GetExpression<'src> {
             compiler.emit_opcodes(&[Opcode::Deref]);
         }
 
-        compiler.emit_opcodes(&[Opcode::Getattr(self.member.to_string().into())]);
+        let idx = compiler.add_string(self.member);
+
+        compiler.emit_opcodes(&[Opcode::Getattr]);
+        compiler.emit_u32(idx as u32);
 
         Ok(())
     }
@@ -1075,7 +1130,10 @@ impl<'src> Codegen<'src> for StructExpression<'src> {
                 );
             }
 
-            compiler.emit_opcodes(&[Opcode::Struct(self.name.to_string().into())]);
+            let idx = compiler.add_string(self.name);
+
+            compiler.emit_opcodes(&[Opcode::Struct]);
+            compiler.emit_u32(idx as u32);
 
             for init in &self.initializers {
                 init.codegen(compiler)?;
@@ -1093,7 +1151,9 @@ impl<'src> Codegen<'src> for StructInitializerExpression<'src> {
         self.value.codegen(compiler)?;
 
         if let Expression::Variable(var) = &*self.member {
-            compiler.emit_opcodes(&[Opcode::Setattr(var.value.to_string().into())]);
+            let idx = compiler.add_string(var.value);
+            compiler.emit_opcodes(&[Opcode::Setattr]);
+            compiler.emit_u32(idx as u32);
         } else {
             unreachable!();
         }
@@ -1106,10 +1166,14 @@ impl<'src> Codegen<'src> for VecExpression<'src> {
     fn codegen(&self, compiler: &mut Compiler<'src>) -> Result<()> {
         let mut elements = self.elements.clone();
         elements.reverse();
+
         for element in elements {
             element.codegen(compiler)?;
         }
-        compiler.emit_opcodes(&[Opcode::Vec(self.elements.len())]);
+
+        compiler.emit_opcodes(&[Opcode::Vec]);
+        compiler.emit_u32(self.elements.len() as u32);
+
         Ok(())
     }
 }
@@ -1125,10 +1189,11 @@ impl<'src> Codegen<'src> for SubscriptExpression<'src> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, num_enum::IntoPrimitive, num_enum::FromPrimitive)]
+#[repr(u8)]
 pub enum Opcode {
     Print,
-    Const(f64),
+    Const,
     Add,
     Sub,
     Mul,
@@ -1147,30 +1212,85 @@ pub enum Opcode {
     Eq,
     Lt,
     Gt,
-    Str(Rc<String>),
-    Jmp(usize),
-    Jz(usize),
-    Call(usize),
+    Str,
+    Jmp,
+    Jz,
+    Call,
     CallMethod,
     Ret,
-    Deepget(usize),
-    DeepgetPtr(usize),
-    Deepset(usize),
+    Deepget,
+    DeepgetPtr,
+    Deepset,
     Deref,
     DerefSet,
-    Getattr(Rc<String>),
-    GetattrPtr(Rc<String>),
-    Setattr(Rc<String>),
+    Getattr,
+    GetattrPtr,
+    Setattr,
     Strcat,
-    Struct(Rc<String>),
+    Struct,
     StructBlueprint,
     Impl,
-    Vec(usize),
+    Vec,
     VecSet,
     Subscript,
-    Pop(usize),
+    Pop,
     Halt,
-    Raw(u8),
+
+    #[default]
+    Raw,
+}
+
+impl Into<Result<u8>> for Opcode {
+    fn into(self) -> Result<u8> {
+        let byte = match self {
+            Opcode::Print => 1,
+            Opcode::Const => 2,
+            Opcode::Add => 3,
+            Opcode::Sub => 4,
+            Opcode::Mul => 5,
+            Opcode::Div => 6,
+            Opcode::Mod => 7,
+            Opcode::BitAnd => 8,
+            Opcode::BitOr => 9,
+            Opcode::BitXor => 10,
+            Opcode::BitShl => 11,
+            Opcode::BitShr => 12,
+            Opcode::BitNot => 13,
+            Opcode::False => 14,
+            Opcode::Not => 15,
+            Opcode::Neg => 16,
+            Opcode::Null => 17,
+            Opcode::Eq => 18,
+            Opcode::Lt => 19,
+            Opcode::Gt => 20,
+            Opcode::Str => 21,
+            Opcode::Jmp => 22,
+            Opcode::Jz => 23,
+            Opcode::Call => 24,
+            Opcode::CallMethod => 25,
+            Opcode::Ret => 26,
+            Opcode::Deepget => 27,
+            Opcode::DeepgetPtr => 28,
+            Opcode::Deepset => 29,
+            Opcode::Deref => 30,
+            Opcode::DerefSet => 31,
+            Opcode::Getattr => 32,
+            Opcode::GetattrPtr => 33,
+            Opcode::Setattr => 34,
+            Opcode::Strcat => 35,
+            Opcode::Struct => 36,
+            Opcode::StructBlueprint => 37,
+            Opcode::Impl => 38,
+            Opcode::Vec => 39,
+            Opcode::VecSet => 40,
+            Opcode::Subscript => 41,
+            Opcode::Pop => 42,
+            Opcode::Halt => 43,
+            _ => bail!("invalid opcode"), 
+        };
+
+        Ok(byte)
+    }
 }
 
 trait Codegen<'src> {
@@ -1179,7 +1299,7 @@ trait Codegen<'src> {
 
 #[derive(Debug, Clone, Default)]
 pub struct Bytecode<'src> {
-    pub code: Vec<Opcode>,
+    pub code: Vec<u8>,
     pub cp: Vec<f64>,
     pub sp: Vec<&'src str>,
 }

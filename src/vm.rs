@@ -66,13 +66,15 @@ where
 
     pub fn exec(&mut self) -> Result<()> {
         loop {
+            let opcode = Opcode::from(unsafe { *self.bytecode.code.get_unchecked(self.ip) });
+
             if cfg!(debug_assertions) {
-                println!("current instruction: {:?}", self.bytecode.code[self.ip]);
+                println!("current instruction: {:?}", opcode);
             }
 
-            match unsafe { self.bytecode.code.get_unchecked(self.ip) } {
-                Opcode::Const(n) => self.handle_op_const(*n),
-                Opcode::Str(s) => self.handle_op_str(s),
+            match opcode {
+                Opcode::Const => self.handle_op_const(),
+                Opcode::Str => self.handle_op_str(),
                 Opcode::Print => self.handle_op_print(),
                 Opcode::Add => self.handle_op_add()?,
                 Opcode::Sub => self.handle_op_sub()?,
@@ -92,29 +94,29 @@ where
                 Opcode::Eq => self.handle_op_eq(),
                 Opcode::Lt => self.handle_op_lt()?,
                 Opcode::Gt => self.handle_op_gt()?,
-                Opcode::Jmp(addr) => self.handle_op_jmp(*addr),
-                Opcode::Jz(addr) => self.handle_op_jz(*addr),
-                Opcode::Call(argcount) => self.handle_op_call(*argcount),
+                Opcode::Jmp => self.handle_op_jmp(),
+                Opcode::Jz => self.handle_op_jz(),
+                Opcode::Call => self.handle_op_call(),
                 Opcode::CallMethod => self.handle_op_call_method()?,
                 Opcode::Ret => self.handle_op_ret(),
-                Opcode::Deepget(idx) => self.handle_op_deepget(*idx),
-                Opcode::DeepgetPtr(idx) => self.handle_op_deepgetptr(*idx),
-                Opcode::Deepset(idx) => self.handle_op_deepset(*idx),
+                Opcode::Deepget => self.handle_op_deepget(),
+                Opcode::DeepgetPtr => self.handle_op_deepgetptr(),
+                Opcode::Deepset => self.handle_op_deepset(),
                 Opcode::Deref => self.handle_op_deref()?,
                 Opcode::DerefSet => self.handle_op_derefset()?,
-                Opcode::Getattr(attr) => self.handle_op_getattr(attr)?,
-                Opcode::GetattrPtr(attr) => self.handle_op_getattrptr(attr)?,
-                Opcode::Setattr(attr) => self.handle_op_setattr(attr),
-                Opcode::Struct(name) => self.handle_op_struct(name),
+                Opcode::Getattr => self.handle_op_getattr()?,
+                Opcode::GetattrPtr => self.handle_op_getattrptr()?,
+                Opcode::Setattr => self.handle_op_setattr(),
+                Opcode::Struct => self.handle_op_struct(),
                 Opcode::StructBlueprint => self.handle_op_struct_blueprint()?,
                 Opcode::Impl => self.handle_op_impl()?,
                 Opcode::Strcat => self.handle_op_strcat()?,
-                Opcode::Vec(element_count) => self.handle_op_vec(*element_count),
+                Opcode::Vec => self.handle_op_vec(),
                 Opcode::VecSet => self.handle_op_vec_set(),
                 Opcode::Subscript => self.handle_op_subscript(),
-                Opcode::Pop(n) => self.handle_op_pop(*n),
+                Opcode::Pop => self.handle_op_pop(),
                 Opcode::Halt => break Ok(()),
-                Opcode::Raw(_) => panic!("vm: raw byte"),
+                Opcode::Raw => panic!("vm: raw byte"),
             }
 
             if cfg!(debug_assertions) {
@@ -125,34 +127,41 @@ where
         }
     }
 
-    fn read_u32(&mut self) -> Result<u32> {
-        let n = self.bytecode.code[self.ip + 1..self.ip + 5]
+    fn read_u32(&mut self) -> u32 {
+        let n: [u8; 4] = self.bytecode.code[self.ip + 1..self.ip + 5]
             .iter()
-            .map(|opcode| match opcode {
-                Opcode::Raw(byte) => Ok(*byte),
-                _ => bail!("vm: not a raw byte"),
-            })
-            .collect::<Result<Vec<u8>>>()
-            .and_then(|vec| vec.try_into().map_err(|_| anyhow!("conversion failed")))
-            .map(u32::from_be_bytes);
+            .map(|byte| *byte)
+            .collect::<Vec<_>>()
+            .try_into().expect("spam");
+
+        // println!("reading after {:?}: {:?}", Opcode::from(self.bytecode.code[self.ip]), &self.bytecode.code[self.ip+1..self.ip+5].iter().map(|byte| Opcode::from(*byte)).collect::<Vec<_>>());
+
 
         self.ip += 4;
 
-        n
+        let read = u32::from_be_bytes(n);
+
+        // println!("reading: {}", read);
+
+        read
     }
 
     /// Handles 'Opcode::Const(f64)' by constructing
     /// an Object::Number, with the f64 as its value,
     /// and pushing it on the stack.
-    fn handle_op_const(&mut self, n: f64) {
-        self.stack.push(n.into());
+    fn handle_op_const(&mut self) {
+        let idx = self.read_u32();
+        let n = unsafe { self.bytecode.cp.get_unchecked(idx as usize) };
+        self.stack.push((*n).into());
     }
 
     /// Handles 'Opcode::Str(&str)' by constructing
     /// an Object::String, with the &str as its va-
     /// lue, and pushing it on the stack.
-    fn handle_op_str(&mut self, s: &'src str) {
-        self.stack.push(s.into());
+    fn handle_op_str(&mut self) {
+        let idx = self.read_u32();
+        let s = unsafe { self.bytecode.sp.get_unchecked(idx as usize) };
+        self.stack.push((*s).into());
     }
 
     /// Handles 'Opcode::Strcat' by popping two obj-
@@ -359,8 +368,9 @@ where
     /// Handles 'Opcode::Jmp(usize)' by setting the
     /// instruction pointer to the address provided
     /// in the opcode.
-    fn handle_op_jmp(&mut self, addr: usize) {
-        self.ip = addr;
+    fn handle_op_jmp(&mut self) {
+        let addr = self.read_u32();
+        self.ip = addr as usize;
     }
 
     /// Handles 'Opcode::Jz(usize)' by popping an
@@ -368,10 +378,11 @@ where
     /// and setting the instruction pointer to the
     /// address provided in the opcode, if and only
     /// if the popped object was falsey.
-    fn handle_op_jz(&mut self, addr: usize) {
+    fn handle_op_jz(&mut self) {
+        let addr = self.read_u32();
         let item = self.stack.pop();
         if let Object::Bool(_b @ false) = item {
-            self.ip = addr;
+            self.ip = addr as usize;
         }
     }
 
@@ -381,16 +392,17 @@ where
     /// tion that comes after the current instruc-
     /// tion pointer, and its location will be the
     /// size of the stack - n.
-    fn handle_op_call(&mut self, n: usize) {
+    fn handle_op_call(&mut self) {
+        let n = self.read_u32();
         self.frame_ptrs.push(BytecodePtr {
-            ptr: self.ip + 1,
-            location: self.stack.len() - n,
+            ptr: self.ip + 5,
+            location: self.stack.len() - n as usize,
         });
     }
 
     fn handle_op_call_method(&mut self) -> Result<()> {
-        let method_name_idx = self.read_u32()?;
-        let argcount = self.read_u32()?;
+        let method_name_idx = self.read_u32();
+        let argcount = self.read_u32();
 
         let object = self.stack.peek(argcount as usize);
 
@@ -445,7 +457,8 @@ where
     /// Handles 'Opcode::Deepget(usize)' by getting an
     /// object at index 'idx' (relative to the current
     /// frame pointer), and pushing it on the stack.
-    fn handle_op_deepget(&mut self, idx: usize) {
+    fn handle_op_deepget(&mut self) {
+        let idx = self.read_u32() as usize;
         let obj = unsafe {
             self.stack
                 .data
@@ -459,7 +472,8 @@ where
     /// the pointer to the object at index 'idx' (rel-
     /// ative to the current frame pointer), and push-
     /// ing it on the stack.
-    fn handle_op_deepgetptr(&mut self, idx: usize) {
+    fn handle_op_deepgetptr(&mut self) {
+        let idx = self.read_u32() as usize;
         let obj = &mut self.stack.data[adjust_idx!(self, idx)] as *mut Object<'src>;
         self.stack.push(Object::Ptr(obj));
     }
@@ -468,7 +482,8 @@ where
     /// object off the stack and setting the object at
     /// index 'idx' (relative to the current frame po-
     /// inter) to the popped object.
-    fn handle_op_deepset(&mut self, idx: usize) {
+    fn handle_op_deepset(&mut self) {
+        let idx = self.read_u32() as usize;
         self.stack.data.swap_remove(adjust_idx!(self, idx));
     }
 
@@ -503,7 +518,9 @@ where
     /// off the stack (expected to be a struct), looking up the
     /// member with the &str value contained in the opcode, and
     /// pushing it on the stack.
-    fn handle_op_getattr(&mut self, attr: &'src str) -> Result<()> {
+    fn handle_op_getattr(&mut self) -> Result<()> {
+        let idx = self.read_u32() as usize;
+        let attr = unsafe { self.bytecode.sp.get_unchecked(idx) };
         if let Object::Struct(obj) = self.stack.pop() {
             match obj.borrow().members.get(attr) {
                 Some(m) => self.stack.push(m.clone()),
@@ -522,7 +539,9 @@ where
     /// off the stack (expected to be a struct), looking up the
     /// member with the &str value contained in the opcode, and
     /// pushing the pointer to it on the stack.
-    fn handle_op_getattrptr(&mut self, attr: &'src str) -> Result<()> {
+    fn handle_op_getattrptr(&mut self) -> Result<()> {
+        let idx = self.read_u32() as usize;
+        let attr = unsafe { self.bytecode.sp.get_unchecked(idx) };
         if let Object::Struct(obj) = self.stack.pop() {
             match obj.borrow_mut().members.get_mut(attr) {
                 Some(m) => self.stack.push(Object::Ptr(m as *mut Object<'src>)),
@@ -542,11 +561,13 @@ where
     /// spectively), setting the member with the &str value co-
     /// ntained in the opcode to the popped value, and pushing
     /// the struct back on the stack.
-    fn handle_op_setattr(&mut self, attr: &'src str) {
+    fn handle_op_setattr(&mut self) {
+        let idx = self.read_u32() as usize;
+        let attr = unsafe { self.bytecode.sp.get_unchecked(idx) };
         let value = self.stack.pop();
         let structobj = self.stack.pop();
         if let Object::Struct(s) = structobj {
-            s.borrow_mut().members.insert(attr.into(), value);
+            s.borrow_mut().members.insert(attr, value);
             self.stack.push(Object::Struct(s));
         }
     }
@@ -555,7 +576,10 @@ where
     /// Object::Struct (using the &str value contained in
     /// the opcode as the naame, and with an empty members
     /// HashMap), and pushing it on the stack.
-    fn handle_op_struct(&mut self, name: &'src str) {
+    fn handle_op_struct(&mut self) {
+        let idx = self.read_u32() as usize;
+        let name = unsafe { self.bytecode.sp.get_unchecked(idx) };
+
         let structobj = Object::Struct(Rc::new(
             (StructObject {
                 members: HashMap::new(),
@@ -567,8 +591,8 @@ where
     }
 
     fn handle_op_struct_blueprint(&mut self) -> Result<()> {
-        let blueprint_name_idx = self.read_u32()?;
-        let member_count = self.read_u32()?;
+        let blueprint_name_idx = self.read_u32();
+        let member_count = self.read_u32();
 
         let mut bp = Blueprint {
             name: self.bytecode.sp[blueprint_name_idx as usize],
@@ -577,7 +601,7 @@ where
         };
 
         for _ in 0..member_count {
-            let member_name_idx = self.read_u32()?;
+            let member_name_idx = self.read_u32();
             let member_name = self.bytecode.sp[member_name_idx as usize];
             bp.members.push(member_name);
         }
@@ -589,13 +613,13 @@ where
     }
 
     fn handle_op_impl(&mut self) -> Result<()> {
-        let blueprint_name_idx = self.read_u32()?;
-        let method_count = self.read_u32()?;
+        let blueprint_name_idx = self.read_u32();
+        let method_count = self.read_u32();
 
         for _ in 0..method_count {
-            let method_name_idx = self.read_u32()?;
-            let paramcount = self.read_u32()?;
-            let location = self.read_u32()?;
+            let method_name_idx = self.read_u32();
+            let paramcount = self.read_u32();
+            let location = self.read_u32();
 
             let f = Function {
                 name: self.bytecode.sp[method_name_idx as usize],
@@ -615,7 +639,9 @@ where
         Ok(())
     }
 
-    fn handle_op_vec(&mut self, element_count: usize) {
+    fn handle_op_vec(&mut self) {
+        let element_count = self.read_u32() as usize;
+
         let mut vec = Vec::new();
         for _ in 0..element_count {
             vec.push(self.stack.pop());
@@ -648,7 +674,8 @@ where
 
     /// Handles 'Opcode::Pop(usize)' by popping
     /// 'popcount' objects off of the stack.
-    fn handle_op_pop(&mut self, popcount: usize) {
+    fn handle_op_pop(&mut self) {
+        let popcount = self.read_u32() as usize;
         for _ in 0..popcount {
             self.stack.pop();
         }
@@ -668,7 +695,7 @@ pub enum Object<'src> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructObject<'src> {
-    members: HashMap<Rc<str>, Object<'src>>,
+    members: HashMap<&'src str, Object<'src>>,
     name: &'src str,
 }
 
