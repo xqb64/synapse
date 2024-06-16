@@ -601,7 +601,7 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         use crate::tokenizer::Tokenizer;
         use crate::util::read_file;
 
-        if let Some(cached_mod) = compiler.cached_mods.get(&self.module.to_string()) {
+        if let Some(cached_mod) = compiler.cached_mods.get(self.module) {
             unsafe {
                 let m = *cached_mod;
 
