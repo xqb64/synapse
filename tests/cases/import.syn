@@ -1,0 +1,6 @@
+use "tests/cases/dummy.syn";
+
+fn main() {
+    dummy();
+    return 0;
+}

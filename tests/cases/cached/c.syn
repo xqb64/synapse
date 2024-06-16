@@ -1,0 +1,1 @@
+fn bla() { print 1; return 0; }

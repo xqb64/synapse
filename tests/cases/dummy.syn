@@ -1,0 +1,1 @@
+fn dummy() { print 1; return 0; }

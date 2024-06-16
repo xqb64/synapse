@@ -1,0 +1,4 @@
+use "tests/cases/tree/e.syn";
+use "tests/cases/tree/f.syn";
+
+fn main() { return 0; }

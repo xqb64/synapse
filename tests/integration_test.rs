@@ -572,3 +572,32 @@ fn _vec() {
     );
     run_test!(path, expected);
 }
+
+#[test]
+fn import_success() {
+    let (path, expected) = (
+        "tests/cases/import.syn",
+        object_vec!(1.0),
+    );
+    run_test!(path, expected);
+}
+
+#[test]
+fn import_cycle() {
+    let (path, expected) = (
+        "tests/cases/cycle/a.syn",
+        "cycle",
+    );
+    run_test_error!(compiler, path, expected);
+}
+
+#[test]
+fn import_cached() {
+    let (path, expected) = (
+        "tests/cases/cached/a.syn",
+        "compiler: using cached import: tests/cases/cached/c.syn",
+    );
+    let (split, _filtered) = fetch_stdout(path);
+    
+    assert!(split.contains(&expected.to_owned()));
+}

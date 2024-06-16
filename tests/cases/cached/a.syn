@@ -1,0 +1,6 @@
+use "tests/cases/cached/b.syn";
+use "tests/cases/cached/c.syn";
+
+fn main() {
+    return 0;
+}

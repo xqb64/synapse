@@ -596,14 +596,21 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         use crate::util::read_file;
 
         if let Some(cached_mod) = compiler.cached_mods.get(&self.module.to_string()) {
-            let m = cached_mod;
+            let m = cached_mod.clone();
+
             unsafe { 
-                if (**m).imports.contains(&compiler.current_mod) {
-                    bail!("cycle");
+                if (**cached_mod).imports.contains(&compiler.current_mod) {
+                    bail!("compiler: cycle");
                 }
-                (*(*m)).parent = Some(compiler.current_mod);
-                (*compiler.current_mod).imports.push(*m);
+
+                ((*m)).parent = Some(compiler.current_mod);
+                (*compiler.current_mod).imports.push(m);
+
+                if cfg!(debug_assertions) {
+                    println!("compiler: using cached import: {}", (*m).path);
+                }
             }
+
         } else {
             let old_module = compiler.current_mod;            
             let m = Module { parent: Some(old_module), imports: vec![], path: self.module.to_string() };
@@ -645,7 +652,9 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
             compiler.current_mod = old_module;
         }
 
-        compiler.print_module_tree(compiler.root_mod, 0);
+        if cfg!(debug_assertions) {
+            compiler.print_module_tree(compiler.root_mod, 0);
+        }
 
         Ok(())
     }

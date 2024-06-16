@@ -1,0 +1,3 @@
+use "tests/cases/cycle/a.syn";
+
+fn main() { return 0; }
