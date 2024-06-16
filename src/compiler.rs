@@ -32,7 +32,11 @@ pub struct Compiler<'src> {
 
 impl<'src> Compiler<'src> {
     pub fn new(arena: &'src Bump, root_mod: &'src str) -> Self {
-        let m = Module { parent: None, imports: vec![], path: root_mod.to_string() };
+        let m = Module {
+            parent: None,
+            imports: vec![],
+            path: root_mod.to_string(),
+        };
         let mptr = arena.alloc(m) as *mut Module;
 
         Compiler {
@@ -67,9 +71,9 @@ impl<'src> Compiler<'src> {
                     }
                     None => bail!("compiler: main fn was not defined"),
                 }
-    
+
                 self.emit_opcodes(&[Opcode::Halt]);
-            }    
+            }
         }
 
         Ok(&self.bytecode)
@@ -93,7 +97,7 @@ impl<'src> Compiler<'src> {
             if i == 0 {
                 continue;
             }
-            print!("{}", if last { "  "} else { "┃ " });
+            print!("{}", if last { "  " } else { "┃ " });
         }
     }
 
@@ -109,12 +113,14 @@ impl<'src> Compiler<'src> {
 
             self.print_prefix(depth, grandpa_last);
 
-            println!("{} {}", if last { "┗━" } else { "┣━" }, unsafe { (*module).path.clone() });
+            println!("{} {}", if last { "┗━" } else { "┣━" }, unsafe {
+                (*module).path.clone()
+            });
         }
 
         unsafe {
             for imported_module in &(*module).imports {
-                self.print_module_tree(*imported_module, depth+1);
+                self.print_module_tree(*imported_module, depth + 1);
             }
         }
     }
@@ -596,40 +602,43 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
         use crate::util::read_file;
 
         if let Some(cached_mod) = compiler.cached_mods.get(&self.module.to_string()) {
-            let m = cached_mod.clone();
+            unsafe {
+                let m = *cached_mod;
 
-            unsafe { 
                 if (**cached_mod).imports.contains(&compiler.current_mod) {
                     bail!("compiler: cycle");
                 }
 
-                ((*m)).parent = Some(compiler.current_mod);
+                (*m).parent = Some(compiler.current_mod);
                 (*compiler.current_mod).imports.push(m);
 
                 if cfg!(debug_assertions) {
                     println!("compiler: using cached import: {}", (*m).path);
                 }
             }
-
         } else {
-            let old_module = compiler.current_mod;            
-            let m = Module { parent: Some(old_module), imports: vec![], path: self.module.to_string() };
+            let old_module = compiler.current_mod;
+            let m = Module {
+                parent: Some(old_module),
+                imports: vec![],
+                path: self.module.to_string(),
+            };
 
             let mptr = compiler.arena.alloc(m) as *mut Module;
 
             unsafe {
                 (*old_module).imports.push(mptr);
             }
-            
+
             compiler.current_mod = mptr;
 
             compiler.cached_mods.insert(self.module.to_string(), mptr);
-    
+
             let src = compiler.arena.alloc_str(&read_file(self.module)?);
-    
+
             let mut tokenizer = Tokenizer::new(src);
             let mut parser = Parser::default();
-    
+
             let Some(tokens) = tokenizer
                 .by_ref()
                 .map(|token| {
@@ -644,11 +653,11 @@ impl<'src> Codegen<'src> for UseStatement<'src> {
                 let unrecognized = tokenizer.get_lexer().slice();
                 bail!("tokenizer: unexpected token: {}", unrecognized);
             };
-    
+
             let ast = parser.parse(tokens)?;
-    
+
             let _bytecode = compiler.compile(&ast)?.clone();
-    
+
             compiler.current_mod = old_module;
         }
 

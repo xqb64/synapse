@@ -447,8 +447,7 @@ where
     /// frame pointer), and pushing it on the stack.
     fn handle_op_deepget(&mut self, idx: usize) {
         let obj = unsafe {
-            self
-                .stack
+            self.stack
                 .data
                 .get_unchecked_mut(adjust_idx!(self, idx))
                 .clone()
