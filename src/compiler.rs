@@ -274,41 +274,21 @@ impl<'src> Compiler<'src> {
     }
 
     fn emit_u32(&mut self, value: u32) {
-        self.bytecode
-            .code
-            .push(((value >> 24) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 16) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 8) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 24) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 16) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 8) & 0xFF) as u8);
         self.bytecode.code.push((value & 0xFF) as u8);
     }
 
     fn emit_f64(&mut self, value: f64) {
         let value = value.to_bits();
-        self.bytecode
-            .code
-            .push(((value >> 56) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 48) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 40) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 32) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 24) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 16) & 0xFF) as u8);
-        self.bytecode
-            .code
-            .push(((value >> 8) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 56) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 48) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 40) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 32) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 24) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 16) & 0xFF) as u8);
+        self.bytecode.code.push(((value >> 8) & 0xFF) as u8);
         self.bytecode.code.push((value & 0xFF) as u8);
     }
 
@@ -341,11 +321,11 @@ impl<'src> Compiler<'src> {
 
     fn patch_jmp(&mut self, idx: usize) {
         let target = self.bytecode.code.len() - 1;
- 
-        self.bytecode.code[idx+1] = ((target >> 24) & 0xFF) as u8;
-        self.bytecode.code[idx+2] = ((target >> 16) & 0xFF) as u8;
-        self.bytecode.code[idx+3] = ((target >> 8) & 0xFF) as u8;
-        self.bytecode.code[idx+4] = (target & 0xFF) as u8;
+
+        self.bytecode.code[idx + 1] = ((target >> 24) & 0xFF) as u8;
+        self.bytecode.code[idx + 2] = ((target >> 16) & 0xFF) as u8;
+        self.bytecode.code[idx + 3] = ((target >> 8) & 0xFF) as u8;
+        self.bytecode.code[idx + 4] = (target & 0xFF) as u8;
     }
 }
 

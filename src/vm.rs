@@ -125,7 +125,6 @@ where
                 self.stack.print_elements();
             }
 
-
             unsafe {
                 self.ip = self.ip.add(1);
             }
