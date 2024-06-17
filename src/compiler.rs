@@ -325,8 +325,6 @@ impl<'src> Compiler<'src> {
 
     fn patch_jmp(&mut self, idx: usize) {
         let target = self.bytecode.code.len() - 1;
-
-        println!("patching after {:?}: {:?} to {}", Opcode::from(self.bytecode.code[idx]), &self.bytecode.code[idx+1..idx+5].iter().map(|byte| Opcode::from(*byte)).collect::<Vec<_>>(), target);
  
         self.bytecode.code[idx+1] = ((target >> 24) & 0xFF) as u8;
         self.bytecode.code[idx+2] = ((target >> 16) & 0xFF) as u8;

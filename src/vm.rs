@@ -128,22 +128,16 @@ where
     }
 
     fn read_u32(&mut self) -> u32 {
-        let n: [u8; 4] = self.bytecode.code[self.ip + 1..self.ip + 5]
-            .iter()
-            .map(|byte| *byte)
-            .collect::<Vec<_>>()
-            .try_into().expect("spam");
+        let value = unsafe {
+            let ptr = self.bytecode.code.as_ptr().add(self.ip + 1);
+            let u32_ptr = ptr as *const [u8; 4];
 
-        // println!("reading after {:?}: {:?}", Opcode::from(self.bytecode.code[self.ip]), &self.bytecode.code[self.ip+1..self.ip+5].iter().map(|byte| Opcode::from(*byte)).collect::<Vec<_>>());
-
+            std::ptr::read_unaligned(u32_ptr)
+        };
 
         self.ip += 4;
 
-        let read = u32::from_be_bytes(n);
-
-        // println!("reading: {}", read);
-
-        read
+        u32::from_be_bytes(value)
     }
 
     /// Handles 'Opcode::Const(f64)' by constructing
