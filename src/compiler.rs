@@ -196,7 +196,7 @@ impl<'src> Compiler<'src> {
         }
 
         if is_specialized {
-            let idx = self.add_string(&get_expr.member);
+            let idx = self.add_string(get_expr.member);
 
             self.emit_opcodes(&[Opcode::Getattr]);
             self.emit_u32(idx as u32);
@@ -207,7 +207,7 @@ impl<'src> Compiler<'src> {
             rhs.codegen(self)?;
         }
 
-        let setattr_idx = self.add_string(&get_expr.member);
+        let setattr_idx = self.add_string(get_expr.member);
         self.emit_opcodes(&[Opcode::Setattr]);
         self.emit_u32(setattr_idx as u32);
 
@@ -268,7 +268,7 @@ impl<'src> Compiler<'src> {
 
     fn emit_opcodes(&mut self, opcodes: &[Opcode]) -> usize {
         for opcode in opcodes {
-            self.bytecode.code.push(opcode.clone().into());
+            self.bytecode.code.push((*opcode).into());
         }
         self.bytecode.code.len() - opcodes.len()
     }
