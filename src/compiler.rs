@@ -83,16 +83,6 @@ impl<'src> Compiler<'src> {
         Ok(&mut self.bytecode)
     }
 
-    fn add_const(&mut self, n: f64) -> usize {
-        match self.bytecode.cp.iter().position(|&x| x == n) {
-            Some(idx) => idx,
-            None => {
-                self.bytecode.cp.push(n);
-                self.bytecode.cp.len() - 1
-            }
-        }
-    }
-
     fn is_last(&self, parent: *mut Module, child: *mut Module) -> bool {
         unsafe {
             if let Some(l) = (*parent).imports.last() {
@@ -284,6 +274,32 @@ impl<'src> Compiler<'src> {
     }
 
     fn emit_u32(&mut self, value: u32) {
+        self.bytecode
+            .code
+            .push(((value >> 24) & 0xFF) as u8);
+        self.bytecode
+            .code
+            .push(((value >> 16) & 0xFF) as u8);
+        self.bytecode
+            .code
+            .push(((value >> 8) & 0xFF) as u8);
+        self.bytecode.code.push((value & 0xFF) as u8);
+    }
+
+    fn emit_f64(&mut self, value: f64) {
+        let value = value.to_bits();
+        self.bytecode
+            .code
+            .push(((value >> 56) & 0xFF) as u8);
+        self.bytecode
+            .code
+            .push(((value >> 48) & 0xFF) as u8);
+        self.bytecode
+            .code
+            .push(((value >> 40) & 0xFF) as u8);
+        self.bytecode
+            .code
+            .push(((value >> 32) & 0xFF) as u8);
         self.bytecode
             .code
             .push(((value >> 24) & 0xFF) as u8);
@@ -787,8 +803,7 @@ impl<'src> Codegen<'src> for LiteralExpression<'src> {
         match &self.value {
             Literal::Num(n) => {
                 compiler.emit_opcodes(&[Opcode::Const]);
-                let idx = compiler.add_const(*n);
-                compiler.emit_u32(idx as u32);
+                compiler.emit_f64(*n);
             }
 
             Literal::Bool(b) => match b {
@@ -1238,59 +1253,6 @@ pub enum Opcode {
     Raw,
 }
 
-impl Into<Result<u8>> for Opcode {
-    fn into(self) -> Result<u8> {
-        let byte = match self {
-            Opcode::Print => 1,
-            Opcode::Const => 2,
-            Opcode::Add => 3,
-            Opcode::Sub => 4,
-            Opcode::Mul => 5,
-            Opcode::Div => 6,
-            Opcode::Mod => 7,
-            Opcode::BitAnd => 8,
-            Opcode::BitOr => 9,
-            Opcode::BitXor => 10,
-            Opcode::BitShl => 11,
-            Opcode::BitShr => 12,
-            Opcode::BitNot => 13,
-            Opcode::False => 14,
-            Opcode::Not => 15,
-            Opcode::Neg => 16,
-            Opcode::Null => 17,
-            Opcode::Eq => 18,
-            Opcode::Lt => 19,
-            Opcode::Gt => 20,
-            Opcode::Str => 21,
-            Opcode::Jmp => 22,
-            Opcode::Jz => 23,
-            Opcode::Call => 24,
-            Opcode::CallMethod => 25,
-            Opcode::Ret => 26,
-            Opcode::Deepget => 27,
-            Opcode::DeepgetPtr => 28,
-            Opcode::Deepset => 29,
-            Opcode::Deref => 30,
-            Opcode::DerefSet => 31,
-            Opcode::Getattr => 32,
-            Opcode::GetattrPtr => 33,
-            Opcode::Setattr => 34,
-            Opcode::Strcat => 35,
-            Opcode::Struct => 36,
-            Opcode::StructBlueprint => 37,
-            Opcode::Impl => 38,
-            Opcode::Vec => 39,
-            Opcode::VecSet => 40,
-            Opcode::Subscript => 41,
-            Opcode::Pop => 42,
-            Opcode::Halt => 43,
-            _ => bail!("invalid opcode"), 
-        };
-
-        Ok(byte)
-    }
-}
-
 trait Codegen<'src> {
     fn codegen(&self, _compiler: &mut Compiler<'src>) -> Result<()>;
 }
@@ -1298,7 +1260,6 @@ trait Codegen<'src> {
 #[derive(Debug, Clone, Default)]
 pub struct Bytecode<'src> {
     pub code: Vec<u8>,
-    pub cp: Vec<f64>,
     pub sp: Vec<&'src str>,
 }
 

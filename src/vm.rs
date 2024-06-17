@@ -125,10 +125,26 @@ where
                 self.stack.print_elements();
             }
 
+
             unsafe {
                 self.ip = self.ip.add(1);
             }
         }
+    }
+
+    fn read_f64(&mut self) -> f64 {
+        let value = unsafe {
+            let ptr = self.ip.add(1);
+            let f64_ptr = ptr as *const [u8; 8];
+
+            std::ptr::read_unaligned(f64_ptr)
+        };
+
+        unsafe {
+            self.ip = self.ip.add(8);
+        }
+
+        f64::from_be_bytes(value)
     }
 
     fn read_u32(&mut self) -> u32 {
@@ -150,9 +166,8 @@ where
     /// an Object::Number, with the f64 as its value,
     /// and pushing it on the stack.
     fn handle_op_const(&mut self) {
-        let idx = self.read_u32();
-        let n = unsafe { self.bytecode.cp.get_unchecked(idx as usize) };
-        self.stack.push((*n).into());
+        let n = self.read_f64();
+        self.stack.push(n.into());
     }
 
     /// Handles 'Opcode::Str(&str)' by constructing
