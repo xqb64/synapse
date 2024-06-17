@@ -55,7 +55,7 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&Bytecode<'src>> {
+    pub fn compile(&mut self, ast: &[Statement<'src>]) -> Result<&mut Bytecode<'src>> {
         for statement in ast {
             statement.codegen(self)?;
         }
@@ -80,7 +80,7 @@ impl<'src> Compiler<'src> {
             }
         }
 
-        Ok(&self.bytecode)
+        Ok(&mut self.bytecode)
     }
 
     fn add_const(&mut self, n: f64) -> usize {

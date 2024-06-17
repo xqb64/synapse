@@ -1,5 +1,5 @@
 use crate::compiler::{Blueprint, Bytecode, Function, Opcode};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -41,10 +41,10 @@ macro_rules! adjust_idx {
 }
 
 pub struct VM<'src, 'bytecode> {
-    bytecode: &'bytecode Bytecode<'src>,
+    bytecode: &'bytecode mut Bytecode<'src>,
     stack: Stack<Object<'src>>,
     frame_ptrs: Stack<BytecodePtr>,
-    ip: usize,
+    ip: *mut u8,
     blueprints: HashMap<&'src str, Blueprint<'src>>,
 }
 
@@ -54,19 +54,21 @@ impl<'src, 'bytecode> VM<'src, 'bytecode>
 where
     'bytecode: 'src,
 {
-    pub fn new(bytecode: &'bytecode Bytecode<'src>) -> VM<'src, 'bytecode> {
+    pub fn new(bytecode: &'bytecode mut Bytecode<'src>) -> VM<'src, 'bytecode> {
         VM {
             bytecode,
             stack: Stack::new(),
             frame_ptrs: Stack::new(),
-            ip: 0,
+            ip: std::ptr::null_mut(),
             blueprints: HashMap::new(),
         }
     }
 
     pub fn exec(&mut self) -> Result<()> {
+        self.ip = self.bytecode.code.as_mut_ptr();
+
         loop {
-            let opcode = Opcode::from(unsafe { *self.bytecode.code.get_unchecked(self.ip) });
+            let opcode = Opcode::from(unsafe { *self.ip });
 
             if cfg!(debug_assertions) {
                 println!("current instruction: {:?}", opcode);
@@ -123,19 +125,23 @@ where
                 self.stack.print_elements();
             }
 
-            self.ip += 1;
+            unsafe {
+                self.ip = self.ip.add(1);
+            }
         }
     }
 
     fn read_u32(&mut self) -> u32 {
         let value = unsafe {
-            let ptr = self.bytecode.code.as_ptr().add(self.ip + 1);
+            let ptr = self.ip.add(1);
             let u32_ptr = ptr as *const [u8; 4];
 
             std::ptr::read_unaligned(u32_ptr)
         };
 
-        self.ip += 4;
+        unsafe {
+            self.ip = self.ip.add(4);
+        }
 
         u32::from_be_bytes(value)
     }
@@ -364,7 +370,9 @@ where
     /// in the opcode.
     fn handle_op_jmp(&mut self) {
         let addr = self.read_u32();
-        self.ip = addr as usize;
+        unsafe {
+            self.ip = self.bytecode.code.as_mut_ptr().add(addr as usize);
+        }
     }
 
     /// Handles 'Opcode::Jz(usize)' by popping an
@@ -376,7 +384,9 @@ where
         let addr = self.read_u32();
         let item = self.stack.pop();
         if let Object::Bool(_b @ false) = item {
-            self.ip = addr as usize;
+            unsafe {
+                self.ip = self.bytecode.code.as_mut_ptr().add(addr as usize);
+            }
         }
     }
 
@@ -389,7 +399,7 @@ where
     fn handle_op_call(&mut self) {
         let n = self.read_u32();
         self.frame_ptrs.push(BytecodePtr {
-            ptr: self.ip + 5,
+            ptr: unsafe { self.ip.add(5) },
             location: self.stack.len() - n as usize,
         });
     }
@@ -426,7 +436,9 @@ where
                 location: self.stack.len() - method.paramcount,
             });
 
-            self.ip = method.location;
+            unsafe {
+                self.ip = self.bytecode.code.as_mut_ptr().add(method.location);
+            }
         } else {
             bail!(
                 "vm: struct '{}' has no method '{}'",
@@ -693,9 +705,9 @@ pub struct StructObject<'src> {
     name: &'src str,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct BytecodePtr {
-    ptr: usize,
+    ptr: *mut u8,
     location: usize,
 }
 
@@ -914,7 +926,7 @@ struct Stack<T> {
 
 impl<T> Stack<T>
 where
-    T: std::fmt::Debug + std::default::Default + Clone,
+    T: std::fmt::Debug + Clone,
 {
     fn new() -> Stack<T> {
         Stack {
