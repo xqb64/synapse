@@ -969,9 +969,7 @@ where
 
     fn last(&mut self) -> &T {
         if self.data.is_empty() {
-            unsafe {
-                std::hint::unreachable_unchecked()
-            }    
+            unsafe { std::hint::unreachable_unchecked() }
         }
         unsafe { self.data.last().unwrap_unchecked() }
     }
